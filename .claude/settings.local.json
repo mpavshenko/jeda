@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.ozon.ru)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

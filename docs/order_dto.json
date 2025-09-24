@@ -1,0 +1,47 @@
+{
+  "order_id": 31546546364,
+  "order_number": "47331548-0061",
+  "posting_number": "47331548-0061-2",
+  "status": "cancelled",
+  "cancel_reason_id": 79,
+  "created_at": "2025-09-02T14:39:09.393041Z",
+  "in_process_at": "2025-09-02T14:39:19.676701Z",
+  "products": [
+    {
+      "sku": 1416178813,
+      "name": "Брюки рабочие DOWELL HD большие размеры",
+      "quantity": 1,
+      "offer_id": "D81230-L",
+      "price": "4200.00",
+      "digital_codes": [],
+      "currency_code": "RUB",
+      "is_marketplace_buyout": false
+    }
+  ],
+  "analytics_data": null,
+  "financial_data": {
+    "products": [
+      {
+        "commission_amount": 0,
+        "commission_percent": 0,
+        "payout": 0,
+        "product_id": 1416178813,
+        "old_price": 4200,
+        "price": 4200,
+        "total_discount_value": 0,
+        "total_discount_percent": 0,
+        "actions": [],
+        "currency_code": "RUB"
+      }
+    ],
+    "cluster_from": "Москва, МО и Дальние регионы",
+    "cluster_to": "Воронеж"
+  },
+  "additional_data": [],
+  "legal_info": {
+    "company_name": "",
+    "inn": "",
+    "kpp": ""
+  },
+  "substatus": "posting_canceled"
+}

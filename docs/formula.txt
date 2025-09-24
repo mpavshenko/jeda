@@ -1,0 +1,66 @@
+Formula for "Необходимо отправить {cluster_name}"
+
+  1. Input Parameters:
+
+  - FBO_STOCK_SUPPLY_DAYS = 28 (days of stock to maintain)
+  - FBO_SAFETY_STOCK_DAYS = 5 (safety buffer days)
+  - delivery_days_fbo - cluster-specific delivery days:
+    - Москва, МО и Дальние регионы: 10 days
+    - Санкт-Петербург и СЗО: 7 days
+    - Урал: 10 days
+    - Дальний Восток: 30 days
+    - Казань: 15 days, etc.
+
+  2. Key Calculations:
+
+  Daily Sales Rate:
+
+  daily_sales = order_count / DAYS_COVERED if order_count > 1 else 0.0
+
+  Order Point (Reorder Level):
+
+  order_point = math.ceil(daily_sales * (delivery_days_fbo + FBO_SAFETY_STOCK_DAYS))
+
+  Decision Logic:
+
+  if (stock_amount + in_transit_amount) <= order_point:
+      # Need to send stock
+      remaining_stock_fbo = max(0, stock_amount - delivery_days_fbo * daily_sales)
+      required_stock_fbo = FBO_STOCK_SUPPLY_DAYS * daily_sales - in_transit_amount
+      fbo_supply_order_original = round(required_stock_fbo - remaining_stock_fbo)
+      fbo_supply_order = min(current_stock_vrn, fbo_supply_order_original)
+  else:
+      # No shipment needed
+      fbo_supply_order = 0
+
+  Package Adjustment:
+
+  if pack_count > 20 and (fbo_supply_order < 0.5 * pack_count):
+      # Skip adjustment for large packs with small orders
+      pass
+  else:
+      fbo_supply_order = round_to_multiple(fbo_supply_order, pack_count, current_stock_vrn)
+
+  3. Formula Breakdown:
+
+  Step 1: Check if restocking is needed
+  - If (current_stock + in_transit) ≤ order_point → YES, send stock
+
+  Step 2: Calculate how much to send
+  - remaining_stock_after_delivery = max(0, current_stock - delivery_days × daily_sales)
+  - target_stock = 28_days × daily_sales
+  - need_to_send = target_stock - in_transit - remaining_stock_after_delivery
+  - actual_send = min(warehouse_stock, need_to_send)
+
+  Step 3: Round to package multiples
+  - Adjust quantity to match packaging requirements
+
+  4. Business Logic:
+
+  This formula ensures 28 days of stock coverage at each cluster while:
+  - Accounting for delivery time to each cluster
+  - Maintaining 5-day safety buffer
+  - Not exceeding available warehouse stock
+  - Respecting product packaging constraints
+
+  The goal is to prevent stockouts while optimizing inventory distribution across Ozon's fulfillment network.
