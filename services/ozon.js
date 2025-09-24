@@ -53,6 +53,23 @@ class Ozon {
     }
   }
 
+  async #enrichProductsWithDetails(products) {
+    const ids = products.map(item => item.product_id);
+
+    console.log(`Getting products info...`);
+    const detailedInfo = await this.getProductDetails(ids);
+    console.log(`Got info for ${detailedInfo.result.length} products`);
+    await sleep();
+
+    const infoMap = new Map(detailedInfo.result.map(p => [p.id, p]));
+    return products.map(p => ({
+      product_id: p.product_id,
+      offer_id: p.offer_id,
+      name: infoMap.get(p.product_id)?.name || null,
+      sku: infoMap.get(p.product_id)?.sku || null
+    }));
+  }
+
   async getAllProducts() {
     const all = [];
     let lastId = '';
@@ -65,25 +82,13 @@ class Ozon {
 
       const { result } = await this.getProducts(limit, lastId);
 
+
       if (result && result.items && result.items.length > 0) {
+        console.log(`Fetched ${result.items.length} products of ${result.total}. Total so far: ${all.length}, lastID: ${lastId}`);
         total = result.total;
 
-        console.log(`Getting products info`);
-        const ids = result.items.map(item => item.product_id);
-        // console.log(ids);
-        const detailedInfo = await this.getProductDetails(ids);
-        console.log(`Got info for ${detailedInfo.result.length} products`);
-        const infoMap = new Map(detailedInfo.result.map(p => [p.id, p]));
-        const products = result.items.map(p => ({
-          product_id: p.product_id,
-          offer_id: p.offer_id,
-          name: infoMap.get(p.product_id).name,
-          sku: infoMap.get(p.product_id).sku
-        }));
-
-
+        const products = await this.#enrichProductsWithDetails(result.items)
         all.push(...products);
-        console.log(`Fetched ${result.items.length} products of ${result.total}. Total so far: ${all.length}, lastID: ${lastId}`);
 
         if (result.items.length < limit || all.length >= result.total) {
           hasMore = false;
@@ -94,7 +99,7 @@ class Ozon {
         hasMore = false;
       }
 
-      if (hasMore) sleep();
+      if (hasMore) await sleep();
     }
 
     if (all.length != total)

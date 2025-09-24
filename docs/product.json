@@ -1,9 +1,17 @@
 {
-  "product_id": 690217218,
-  "offer_id": "42E581",
-  "has_fbo_stocks": false,
-  "has_fbs_stocks": true,
-  "archived": false,
-  "is_discounted": false,
-  "quants": []
+  "result": {
+    "items": [
+      {
+        "product_id": 690217218,
+        "offer_id": "42E581",
+        "has_fbo_stocks": false,
+        "has_fbs_stocks": true,
+        "archived": false,
+        "is_discounted": false,
+        "quants": []
+      }
+    ],
+    "total": 334,
+    "last_id": "WzY5MjcxMTE5OCw2OTI3MTExOThd"
+  }
 }
