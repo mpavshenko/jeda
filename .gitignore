@@ -2,3 +2,9 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# Excel files (except in docs folder)
+*.xlsx
+*.xls
+!docs/*.xlsx
+!docs/*.xls

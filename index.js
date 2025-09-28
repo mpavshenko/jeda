@@ -1,62 +1,93 @@
 const Ozon = require('./services/ozon');
+const Excel = require('./services/excel');
 const json = o => JSON.stringify(o, null, 2)
+const ozon = new Ozon();
+
+async function calculateSupply(fromDate, toDate) {
+
+  // ORDERS
+  const daysCovered = ozon.calculateDaysCovered(fromDate, toDate);
+  console.log(`Days covered: ${daysCovered}`);
+  let orders = await ozon.getAllFboOrders(fromDate, toDate);
+  console.log(`Found ${orders.length} orders`);
+  orders = orders.filter(o => o.status !== 'cancelled');
+  console.log(`Found not cancelled ${orders.length} orders`);
+  const orderedProducts = ozon.getFlattenedOrderedProducts(orders);
+  const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(orderedProducts, daysCovered);
+
+  // STOCKS
+  const clusters = await ozon.getClustersAndWarehouses();
+  const w2c = ozon.createWarehouseToClusterMap(clusters);
+  const allStocks = await ozon.getAllStocks();
+  const stocksByCluster = ozon.calculateStocksByCluster(allStocks, w2c);
+  const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster);
+
+  // EXPORT TO EXCEL
+  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'orders_with_stocks.xlsx');
+}
 
 async function main() {
   console.log("Starting...");
 
-  const ozon = new Ozon();
-
-  try {
-    const response = await ozon.getProducts(3);
-    console.log(json(response));
-
-    const all = await ozon.getAllProducts();
-    console.log(all.length);
-    console.log(json(all[0]));
-    console.table(all);
-
-    return;
-
-    const ids = response.result.items.map(item => item.product_id);
-
-    const detailedInfo = await ozon.getProductDetails(ids);
-
-    console.log(`Total products: ${detailedInfo.result.total || detailedInfo.result.length}`);
-
-    detailedInfo.result.slice(0, 1).forEach((product, index) => {
-      console.log(`Product ${index + 1}:`);
-      console.log(JSON.stringify(product, null, 2));
-      console.log('---');
-    });
-
-    const infoMap = new Map(detailedInfo.result.map(p => [p.id, p]));
-
-    console.log([...infoMap.keys()]);
-
-    const products = response.result.items.map(p => ({
-      product_id: p.product_id,
-      offer_id: p.offer_id,
-      // info_offer_id: infoMap.get(p.product_id).offer_id,
-      info_name: infoMap.get(p.product_id).name,
-      info_sku: infoMap.get(p.product_id).sku
-    }));
-
-    console.table(products);
-
-    // 2021-09-01T00:00:00.000Z
-
-    // const orders = await ozon.getFboOrders('2025-09-01T00:00:00.000Z', '2025-09-02T23:59:59.000Z');
-    // console.log(JSON.stringify(orders, null, 2));
-    // console.log(`Found ${orders.length} orders`);
-    // if (orders.length > 0) {
-    //   console.log(JSON.stringify(orders[0], null, 2));
-    // }
+  await calculateSupply('2025-08-01T00:00:00.000Z', '2025-08-31T23:59:59.000Z');
 
 
-  } catch (error) {
-    console.error('Error fetching products:', error.message);
-  }
+  // const response = await ozon.getProducts(3);
+  // console.log(json(response));
+
+
+  //=================================== STOCKS
+  // const products = await ozon.getAllProducts();
+  // const nameByOfferId = ozon.createOfferIdToNameMap(products);
+  // console.log(json(nameByOfferId));
+
+
+
+
+  // const clusters = await ozon.getClustersAndWarehouses();
+  // const w2c = ozon.createWarehouseToClusterMap(clusters);
+  // console.log(json(w2c));
+
+  // const allStocks = await ozon.getAllStocks();
+  // const stocksByCluster = ozon.calculateStocksByCluster(allStocks, w2c);
+  // console.log(json(stocksByCluster));
+
+  // flatStocks = ozon.transformStocksByClusterToFlat(stocksByCluster, nameByOfferId);
+  // console.log(flatStocks[0]);
+
+  // Excel.exportToExcel(flatStocks, 'stocks_by_cluster.xlsx');
+  // await Excel.exportToExcelWithHeatmap(flatStocks, 'stocks_by_cluster_heatmap.xlsx');
+
+  //=================================== ORDERS
+
+  // let orders = await ozon.getAllFboOrders('2025-06-01T00:00:00.000Z', '2025-08-31T23:59:59.000Z');
+  // console.log(`Found ${orders.length} orders`);
+  // orders = orders.filter(o => o.status == 'cancelled');
+  // console.log(`Found not cancelled ${orders.length} orders`);
+  // console.log(JSON.stringify(orders, null, 2));
+
+  // if (orders.length > 0) {
+  //   console.log(json(orders[0]));
+  // }
+
+  // const orderedProducts = ozon.getFlattenedOrderedProductsFunctional(orders);
+  // console.log(json(orderedProducts[0]));
+  // console.table(orderedProducts);
+
+  // const orderedProductsByCluster = ozon.calculateProductQuantityByClusterFunctional(orderedProducts);
+  // console.log(json(orderedProductsByCluster));
+  // console.table(orderedProductsByCluster);
+
+  // const orderedProductsByClusterFlat = ozon.calculateProductQuantityByClusterFlat(orderedProducts);
+  // console.table(orderedProductsByClusterFlat);
+
+  // Excel.exportToExcel(orderedProductsByClusterFlat, 'products_by_cluster.xlsx');
+  // await Excel.exportToExcelWithHeatmap(orderedProductsByClusterFlat, 'products_by_cluster_heatmap.xlsx');
+
+
 }
+
+
 
 main().catch(error => {
   console.error('Unhandled error:', error);
