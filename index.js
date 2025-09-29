@@ -4,7 +4,6 @@ const json = o => JSON.stringify(o, null, 2)
 const ozon = new Ozon();
 
 async function calculateSupply(fromDate, toDate) {
-
   // ORDERS
   const daysCovered = ozon.calculateDaysCovered(fromDate, toDate);
   console.log(`Days covered: ${daysCovered}`);
@@ -25,15 +24,27 @@ async function calculateSupply(fromDate, toDate) {
   const fbsOrderedProductsFBS = ozon.getFlattenedOrderedProducts(fbsOrders);
   const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(fboOrderedProducts, fbsOrderedProductsFBS, daysCovered);
 
-  // STOCKS
+  // WH
   const clusters = await ozon.getClustersAndWarehouses();
   const w2c = ozon.createWarehouseToClusterMap(clusters);
+
+  // STOCKS
   const allStocks = await ozon.getAllStocks();
   const stocksByCluster = ozon.calculateStocksByCluster(allStocks, w2c);
-  const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster);
+
+  // IN-TRANSIT
+  const supplyOrders = await ozon.getAllSupplyOrders();
+  const bundleItems = await ozon.getAllBundleItems(supplyOrders);
+  const inTransitByCluster = ozon.calculateInTransitByCluster(bundleItems, w2c);
+
+  // MERGE
+  const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
 
   // EXPORT TO EXCEL
-  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'fbs_fbo_orders_with_stocks.xlsx');
+  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'fbs_fbo_orders_with_stocks_and_transit.xlsx');
+
+  // Print API call count
+  console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
 }
 
 async function main() {

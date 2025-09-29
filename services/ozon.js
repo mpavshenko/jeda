@@ -5,6 +5,8 @@ const config = require('../config');
 
 class Ozon {
   constructor() {
+    this.apiCallCount = 0;
+
     this.client = axios.create({
       baseURL: config.baseURL,
       headers: {
@@ -14,8 +16,10 @@ class Ozon {
       }
     });
 
-    // rate limiting
+    // rate limiting and API call counting
     this.client.interceptors.request.use(async (axiosConfig) => {
+      this.apiCallCount++;
+
       if (this.lastRequestTime) {
         const timeDiff = Date.now() - this.lastRequestTime;
         if (timeDiff < config.requestDelay) {
@@ -30,7 +34,16 @@ class Ozon {
     this.client.interceptors.response.use(
       response => response,
       error => {
-        console.error('OZON API Error:', error.response?.data || error.message);
+        if (error.response) {
+          console.error('OZON API Error:', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            url: error.config?.url
+          });
+        } else {
+          console.error('OZON API Error:', error.message);
+        }
         return Promise.reject(error);
       }
     );
@@ -262,7 +275,10 @@ class Ozon {
   /* Result example:
   [{
     "cluster_name": "Ярославль",
-    "warehouses": ["ЯРОСЛАВЛЬ_АППЗ_1","КОСТРОМА_АППЗ_2"]
+    "warehouses": [
+      { "id": 1020000890160000, "name": "ЯРОСЛАВЛЬ_АППЗ_1" },
+      { "id": 1020001007805000, "name": "КОСТРОМА_АППЗ_2" }
+    ]
   )]
   */
   async getClustersAndWarehouses() {
@@ -284,7 +300,10 @@ class Ozon {
           cluster.logistic_clusters.forEach(logisticCluster => {
             if (logisticCluster.warehouses) {
               logisticCluster.warehouses.forEach(warehouse => {
-                clusterData.warehouses.push(warehouse.name);
+                clusterData.warehouses.push({
+                  id: warehouse.warehouse_id,
+                  name: warehouse.name
+                });
               });
             }
           });
@@ -303,6 +322,8 @@ class Ozon {
 
   /* Result example:
   {
+    "1020000890160000": "Ярославль",
+    "1020001007805000": "Ярославль",
     "ЯРОСЛАВЛЬ_АППЗ_1": "Ярославль",
     "КОСТРОМА_АППЗ_2": "Ярославль",
     "ПЕРМЬ_РФЦ": "Урал",
@@ -310,8 +331,10 @@ class Ozon {
   }*/
   createWarehouseToClusterMap(clustersArray) {
     return clustersArray.reduce((map, cluster) => {
-      cluster.warehouses.forEach(warehouseName => {
-        map[warehouseName] = cluster.cluster_name;
+      cluster.warehouses.forEach(warehouse => {
+        // Map both ID and name to cluster
+        map[warehouse.id] = cluster.cluster_name;
+        map[warehouse.name] = cluster.cluster_name;
       });
       return map;
     }, {});
@@ -434,32 +457,44 @@ class Ozon {
   "name": "Полукомбинезон рабочий DOWELL White HD",
   "clusters": {
     "Казань": {
+      "fboTotal": 3,
+      "fbsTotal": 1,
       "total": 4,
       "daily": 0.12903225806451613,
-      "stock": 4
+      "stock": 4,
+      "in_transit": 2
     },
     "Саратов": {
+      "fboTotal": 0,
+      "fbsTotal": 1,
       "total": 1,
       "daily": 0.03225806451612903,
-      "stock": 2
+      "stock": 2,
+      "in_transit": 0
     }
   }*/
-  mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster) {
-    return orderedProductsByCluster.map(product => {
+  mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster = {}) {
+    const result = [];
+    const processedOfferIds = new Set();
+
+    // Process products with orders
+    orderedProductsByCluster.forEach(product => {
       const stockData = stocksByCluster[product.offer_id];
+      const inTransitData = inTransitByCluster[product.offer_id];
       const enrichedProduct = {
         ...product,
         clusters: {}
       };
 
-      // Merge order data with stock data for each cluster
+      // Merge order data with stock data and in-transit data for each cluster
       Object.keys(product.clusters).forEach(clusterName => {
         enrichedProduct.clusters[clusterName] = {
           fboTotal: product.clusters[clusterName].fboTotal,
           fbsTotal: product.clusters[clusterName].fbsTotal,
           total: product.clusters[clusterName].total,
           daily: product.clusters[clusterName].daily,
-          stock: stockData?.clusters?.[clusterName]?.free_to_sell_amount || 0
+          stock: stockData?.clusters?.[clusterName]?.free_to_sell_amount || 0,
+          in_transit: inTransitData?.[clusterName] || 0
         };
       });
 
@@ -472,14 +507,78 @@ class Ozon {
               fbsTotal: 0,
               total: 0,
               daily: 0,
-              stock: stockData.clusters[clusterName].free_to_sell_amount || 0
+              stock: stockData.clusters[clusterName].free_to_sell_amount || 0,
+              in_transit: inTransitData?.[clusterName] || 0
             };
           }
         });
       }
 
-      return enrichedProduct;
+      // Add clusters that only exist in in-transit data (with 0 orders and 0 stock)
+      if (inTransitData) {
+        Object.keys(inTransitData).forEach(clusterName => {
+          if (!enrichedProduct.clusters[clusterName]) {
+            enrichedProduct.clusters[clusterName] = {
+              fboTotal: 0,
+              fbsTotal: 0,
+              total: 0,
+              daily: 0,
+              stock: 0,
+              in_transit: inTransitData[clusterName] || 0
+            };
+          }
+        });
+      }
+
+      result.push(enrichedProduct);
+      processedOfferIds.add(product.offer_id);
     });
+
+    // Add products that have ONLY in-transit (no orders)
+    Object.keys(inTransitByCluster).forEach(offerId => {
+      if (!processedOfferIds.has(offerId)) {
+        const stockData = stocksByCluster[offerId];
+        const inTransitData = inTransitByCluster[offerId];
+        const product = {
+          offer_id: offerId,
+          name: offerId, // No name available for products without orders
+          clusters: {}
+        };
+
+        // Add all in-transit clusters
+        Object.keys(inTransitData).forEach(clusterName => {
+          product.clusters[clusterName] = {
+            fboTotal: 0,
+            fbsTotal: 0,
+            total: 0,
+            daily: 0,
+            stock: stockData?.clusters?.[clusterName]?.free_to_sell_amount || 0,
+            in_transit: inTransitData[clusterName] || 0
+          };
+        });
+
+        // Add stock-only clusters (if product has stocks in clusters without in-transit)
+        if (stockData) {
+          Object.keys(stockData.clusters).forEach(clusterName => {
+            if (!product.clusters[clusterName]) {
+              product.clusters[clusterName] = {
+                fboTotal: 0,
+                fbsTotal: 0,
+                total: 0,
+                daily: 0,
+                stock: stockData.clusters[clusterName].free_to_sell_amount || 0,
+                in_transit: 0
+              };
+            }
+          });
+        }
+
+        result.push(product);
+        processedOfferIds.add(offerId);
+      }
+    });
+
+    return result;
   }
 
   transformStocksByClusterToFlat(stocksByCluster, offerIdToNameMap) {
@@ -605,6 +704,215 @@ class Ozon {
         return acc;
       }, {})
     );
+  }
+
+  // Get all supply order IDs with specified states
+  async getSupplyOrderIds() {
+    const states = [
+      "ORDER_STATE_DATA_FILLING",
+      "ORDER_STATE_READY_TO_SUPPLY",
+      "ORDER_STATE_ACCEPTED_AT_SUPPLY_WAREHOUSE",
+      "ORDER_STATE_IN_TRANSIT",
+      "ORDER_STATE_ACCEPTANCE_AT_STORAGE_WAREHOUSE"
+    ];
+
+    let allSupplyOrderIds = [];
+    let fromSupplyOrderId = null;
+
+    while (true) {
+      const body = {
+        filter: {
+          states: states
+        },
+        paging: {
+          limit: 100
+        }
+      };
+
+      if (fromSupplyOrderId) {
+        body.paging.from_supply_order_id = fromSupplyOrderId;
+      }
+
+      try {
+        const response = await this.client.post('/v2/supply-order/list', body);
+        const supplyOrderIds = response.data.supply_order_id || [];
+
+        if (supplyOrderIds.length === 0) {
+          break;
+        }
+
+        allSupplyOrderIds.push(...supplyOrderIds);
+        fromSupplyOrderId = response.data.last_supply_order_id;
+
+        if (!fromSupplyOrderId) {
+          break;
+        }
+      } catch (error) {
+        console.error('Error fetching supply order IDs:', error.message);
+        throw error;
+      }
+    }
+
+    return allSupplyOrderIds;
+  }
+
+  // Get detailed info for supply orders in batches
+  async getSupplyOrdersInfo(supplyOrderIds) {
+    const BATCH_SIZE = 50;
+    let allOrders = [];
+
+    for (let i = 0; i < supplyOrderIds.length; i += BATCH_SIZE) {
+      const batchIds = supplyOrderIds.slice(i, i + BATCH_SIZE);
+
+      try {
+        const response = await this.client.post('/v2/supply-order/get', {
+          order_ids: batchIds
+        });
+
+        const orders = response.data.orders || [];
+        allOrders.push(...orders);
+      } catch (error) {
+        console.error(`Error fetching supply orders batch ${i}-${i + BATCH_SIZE}:`, error.message);
+        throw error;
+      }
+    }
+
+    return allOrders;
+  }
+
+  // Get bundle items with pagination
+  async getBundleItems(bundleId) {
+    let allItems = [];
+    let lastId = null;
+
+    while (true) {
+      const body = {
+        bundle_ids: [bundleId],
+        limit: 50
+      };
+
+      if (lastId) {
+        body.last_id = lastId;
+      }
+
+      try {
+        const response = await this.client.post('/v1/supply-order/bundle', body);
+        const items = response.data.items || [];
+
+        if (items.length === 0) {
+          break;
+        }
+
+        allItems.push(...items);
+
+        const hasNext = response.data.has_next;
+        lastId = response.data.last_id;
+
+        if (!hasNext || !lastId) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error fetching bundle items for bundle ${bundleId}:`, error.message);
+        throw 'getBundleItemsError';
+      }
+    }
+
+    return allItems;
+  }
+
+  // Get all supply orders with only necessary data
+  async getAllSupplyOrders() {
+    const supplyOrderIds = await this.getSupplyOrderIds();
+    console.log(supplyOrderIds);
+    console.log(`Found ${supplyOrderIds.length} supply orders`);
+
+    const orders = await this.getSupplyOrdersInfo(supplyOrderIds);
+    console.log(`Fetched ${orders.length} supply order details`);
+
+    // Extract only needed data: supplies with storage_warehouse_id and bundle_id
+    return orders.map(order => ({
+      supplies: (order.supplies || []).map(supply => ({
+        storage_warehouse_id: supply.storage_warehouse_id,
+        bundle_id: supply.bundle_id,
+        order: order.supply_order_number
+      }))
+    }));
+  }
+
+  // Get all bundle items for multiple bundles with only necessary fields
+  async getAllBundleItems(orders) {
+    const allBundleItems = [];
+
+    for (const order of orders) {
+      const supplies = order.supplies || [];
+
+      for (const supply of supplies) {
+        const storageWarehouseId = supply.storage_warehouse_id;
+        const bundleId = supply.bundle_id;
+
+        if (!storageWarehouseId || !bundleId) {
+          continue;
+        }
+
+        console.log(`Fetching bundle ${bundleId} items...`);
+        const items = await this.getBundleItems(bundleId);
+
+        // Extract only needed fields: offer_id, quantity, storage_warehouse_id
+        items.forEach(item => {
+          allBundleItems.push({
+            offer_id: item.offer_id,
+            quantity: item.quantity,
+            storage_warehouse_id: storageWarehouseId
+          });
+        });
+      }
+    }
+
+    return allBundleItems;
+  }
+
+  /* Result example:
+  {
+    "D81240-4XL": {
+      "Москва, МО и Дальние регионы": 10,
+      "Санкт-Петербург и СЗО": 5
+    },
+    "D81140-L": {
+      "Казань": 3
+    }
+  }*/
+  calculateInTransitByCluster(bundleItems, warehouseToClusterMap) {
+    const inTransitByCluster = {};
+
+    bundleItems.forEach(item => {
+      const offerId = item.offer_id || '';
+      const quantity = item.quantity || 0;
+      const storageWarehouseId = item.storage_warehouse_id;
+      const clusterName = warehouseToClusterMap[storageWarehouseId];
+
+      if (!clusterName || !offerId) {
+        return;
+      }
+
+      if (!inTransitByCluster[offerId]) {
+        inTransitByCluster[offerId] = {};
+      }
+      if (!inTransitByCluster[offerId][clusterName]) {
+        inTransitByCluster[offerId][clusterName] = 0;
+      }
+
+      inTransitByCluster[offerId][clusterName] += quantity;
+    });
+
+    return inTransitByCluster;
+  }
+
+  getApiCallCount() {
+    return this.apiCallCount;
+  }
+
+  resetApiCallCount() {
+    this.apiCallCount = 0;
   }
 
 }
