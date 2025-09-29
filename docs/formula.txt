@@ -64,3 +64,41 @@ Formula for "Необходимо отправить {cluster_name}"
   - Respecting product packaging constraints
 
   The goal is to prevent stockouts while optimizing inventory distribution across Ozon's fulfillment network.
+
+
+
+
+
+  The in_transit_amount is calculated using a multi-step process that calls several Ozon API methods:
+
+  API Methods Used:
+
+  1. POST /v2/supply-order/list
+
+  File: common/ozon_api_client.py:159
+  - Gets list of supply order IDs
+  - Filters by states: ORDER_STATE_DATA_FILLING, ORDER_STATE_READY_TO_SUPPLY, ORDER_STATE_ACCEPTED_AT_SUPPLY_WAREHOUSE, ORDER_STATE_IN_TRANSIT,
+  ORDER_STATE_ACCEPTANCE_AT_STORAGE_WAREHOUSE
+
+  2. POST /v2/supply-order/get
+
+  File: common/ozon_api_client.py:192
+  - Gets detailed info for supply orders (batches of 50)
+  - Returns orders with their supplies and warehouse info
+
+  3. POST /v1/supply-order/bundle
+
+  File: common/ozon_api_client.py:230
+  - Gets individual items within each supply bundle
+  - Returns offer_id and quantity for each product
+
+  Process Flow:
+
+  1. Get all active supply orders (pagination with 100 limit)
+  2. Process orders in batches of 50 to get detailed info
+  3. For each supply in each order:
+    - Get storage_warehouse_id and bundle_id
+    - Map warehouse to cluster using get_warehouse_to_cluster_map()
+  4. For each bundle, paginate through items (50 limit) to get:
+    - offer_id → convert to product_code
+    - quantity → add to cluster totals

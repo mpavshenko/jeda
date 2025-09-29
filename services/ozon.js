@@ -125,28 +125,81 @@ class Ozon {
     }
   }
 
-  async getFboOrders(dateFrom, dateTo) {
-    const body = {
-      dir: "ASC",
-      filter: {
-        since: dateFrom,
-        to: dateTo
-      },
-      limit: 1000,
-      offset: 0,
-      with: {
-        analytics_data: true,
-        financial_data: true
+  /* Result example:
+  [{
+    "status": "delivered",
+    "products": [
+      {
+        "price": "7341.0000",
+        "offer_id": "D82050-41",
+        "name": "Полуботинки рабочие со стальным подноском",
+        "sku": 2136393903,
+        "quantity": 1,
+        "currency_code": "RUB",
+        "is_blr_traceable": false,
+        "is_marketplace_buyout": false,
+        "imei": []
       }
-    };
+    ],
+    "cluster_from": "Москва, МО и Дальние регионы",
+    "cluster_to": "Москва, МО и Дальние регионы"
+  }]*/
+  async getAllFbsOrders(dateFrom, dateTo) {
+    const allOrders = [];
+    let offset = 0;
+    const limit = 1000;
+    let hasMore = true;
 
-    try {
-      const response = await this.client.post('/v2/posting/fbo/list', body);
-      return response.data.result;
-    } catch (error) {
-      console.error('Error fetching FBO orders:', error.response?.data || error.message);
-      throw error;
+    while (hasMore) {
+      console.log(`Fetching FBS orders batch with offset: ${offset}`);
+
+      const body = {
+        dir: "ASC",
+        filter: {
+          since: dateFrom,
+          to: dateTo
+        },
+        limit,
+        offset,
+        with: {
+          analytics_data: true,
+          financial_data: true
+        }
+      };
+
+      try {
+        const response = await this.client.post('/v3/posting/fbs/list', body);
+        const result = response.data.result || {};
+        const orders = result.postings || [];
+
+        if (orders.length > 0) {
+          // Transform to only include used fields
+          const transformedOrders = orders.map(order => ({
+            status: order.status,
+            products: order.products,
+            cluster_from: order.financial_data?.cluster_from || null,
+            cluster_to: order.financial_data?.cluster_to || null
+          }));
+
+          allOrders.push(...transformedOrders);
+          console.log(`Fetched ${orders.length} FBS orders. Total so far: ${allOrders.length}`);
+
+          if (orders.length < limit || !result.has_next) {
+            hasMore = false;
+          } else {
+            offset += limit;
+          }
+        } else {
+          hasMore = false;
+        }
+      } catch (error) {
+        console.error(`Error fetching FBS orders at offset ${offset}:`, error.response?.data || error.message);
+        throw error;
+      }
     }
+
+    console.log(`Successfully fetched all ${allOrders.length} FBS orders`);
+    return allOrders;
   }
 
   async getAllFboOrders(dateFrom, dateTo) {
@@ -177,7 +230,15 @@ class Ozon {
         const orders = response.data.result || [];
 
         if (orders.length > 0) {
-          allOrders.push(...orders);
+          // Transform to only include used fields
+          const transformedOrders = orders.map(order => ({
+            status: order.status,
+            products: order.products,
+            cluster_from: order.financial_data?.cluster_from || null,
+            cluster_to: order.financial_data?.cluster_to || null
+          }));
+
+          allOrders.push(...transformedOrders);
           console.log(`Fetched ${orders.length} orders. Total so far: ${allOrders.length}`);
 
           if (orders.length < limit) {
@@ -394,6 +455,8 @@ class Ozon {
       // Merge order data with stock data for each cluster
       Object.keys(product.clusters).forEach(clusterName => {
         enrichedProduct.clusters[clusterName] = {
+          fboTotal: product.clusters[clusterName].fboTotal,
+          fbsTotal: product.clusters[clusterName].fbsTotal,
           total: product.clusters[clusterName].total,
           daily: product.clusters[clusterName].daily,
           stock: stockData?.clusters?.[clusterName]?.free_to_sell_amount || 0
@@ -405,6 +468,8 @@ class Ozon {
         Object.keys(stockData.clusters).forEach(clusterName => {
           if (!enrichedProduct.clusters[clusterName]) {
             enrichedProduct.clusters[clusterName] = {
+              fboTotal: 0,
+              fbsTotal: 0,
               total: 0,
               daily: 0,
               stock: stockData.clusters[clusterName].free_to_sell_amount || 0
@@ -435,26 +500,18 @@ class Ozon {
 
   /* Result example:
   {
-    "created_at": "2025-06-01T01:52:02.042872Z",
-    "sku": 1767829655,
     "name": "Полукомбинезон рабочий спецодежда DOWELL HD большие размеры",
     "quantity": 1,
     "offer_id": "D81240-4XL",
-    "price": "3722.00",
-    "cluster_from": "Уфа",
     "cluster_to": "Дальний Восток"
   }*/
   getFlattenedOrderedProducts(orders) {
     return orders.flatMap(order =>
       order.products.map(product => ({
-        // created_at: order.created_at,
-        // sku: product.sku,
         name: product.name,
         quantity: product.quantity,
         offer_id: product.offer_id,
-        // price: product.price,
-        // cluster_from: order.financial_data?.cluster_from || null,
-        cluster_to: order.financial_data?.cluster_to || null
+        cluster_to: order.cluster_to
       }))
     );
   }
@@ -465,34 +522,58 @@ class Ozon {
     "offer_id": "D81240-4XL",
     "name": "Полукомбинезон рабочий спецодежда DOWELL HD большие размеры",
     "clusters": {
-      "Дальний Восток": { total: 3, daily: 0.1 },
-      "Юг": { total: 1, daily: 0.033 },
-      "Москва, МО и Дальние регионы": { total: 2, daily: 0.067 },
-      "Санкт-Петербург и СЗО": { total: 4, daily: 0.133 },
-      "Сибирь": { total: 1, daily: 0.033 },
-      "Казань": { total: 1, daily: 0.033 }
+      "Дальний Восток": { fboTotal: 2, fbsTotal: 1, total: 3, daily: 0.1 },
+      "Юг": { fboTotal: 0, fbsTotal: 1, total: 1, daily: 0.033 },
+      "Москва, МО и Дальние регионы": { fboTotal: 1, fbsTotal: 1, total: 2, daily: 0.067 },
+      "Санкт-Петербург и СЗО": { fboTotal: 3, fbsTotal: 1, total: 4, daily: 0.133 },
+      "Сибирь": { fboTotal: 1, fbsTotal: 0, total: 1, daily: 0.033 },
+      "Казань": { fboTotal: 0, fbsTotal: 1, total: 1, daily: 0.033 }
     }
   }*/
-  calculateProductQuantityByCluster(orderedProducts, daysCovered) {
-    return Object.values(
-      orderedProducts.reduce((acc, product) => {
-        const { offer_id, name, quantity, cluster_to } = product;
-        const cluster = cluster_to || 'Unknown';
+  calculateProductQuantityByCluster(fboProducts, fbsProducts, daysCovered) {
+    const result = {};
 
-        if (!acc[offer_id]) {
-          acc[offer_id] = { offer_id, name, clusters: {} };
-        }
+    // Process FBO orders
+    fboProducts.forEach(product => {
+      const { offer_id, name, quantity, cluster_to } = product;
+      const cluster = cluster_to || 'Unknown';
 
-        if (!acc[offer_id].clusters[cluster]) {
-          acc[offer_id].clusters[cluster] = { total: 0, daily: 0 };
-        }
+      if (!result[offer_id]) {
+        result[offer_id] = { offer_id, name, clusters: {} };
+      }
 
-        acc[offer_id].clusters[cluster].total += quantity;
-        acc[offer_id].clusters[cluster].daily = acc[offer_id].clusters[cluster].total / daysCovered;
+      if (!result[offer_id].clusters[cluster]) {
+        result[offer_id].clusters[cluster] = { fboTotal: 0, fbsTotal: 0, total: 0, daily: 0 };
+      }
 
-        return acc;
-      }, {})
-    );
+      result[offer_id].clusters[cluster].fboTotal += quantity;
+    });
+
+    // Process FBS orders
+    fbsProducts.forEach(product => {
+      const { offer_id, name, quantity, cluster_to } = product;
+      const cluster = cluster_to || 'Unknown';
+
+      if (!result[offer_id]) {
+        result[offer_id] = { offer_id, name, clusters: {} };
+      }
+
+      if (!result[offer_id].clusters[cluster]) {
+        result[offer_id].clusters[cluster] = { fboTotal: 0, fbsTotal: 0, total: 0, daily: 0 };
+      }
+
+      result[offer_id].clusters[cluster].fbsTotal += quantity;
+    });
+
+    // Calculate totals and daily averages
+    Object.values(result).forEach(product => {
+      Object.values(product.clusters).forEach(cluster => {
+        cluster.total = cluster.fboTotal + cluster.fbsTotal;
+        cluster.daily = cluster.total / daysCovered;
+      });
+    });
+
+    return Object.values(result);
   }
 
   /* Result example:

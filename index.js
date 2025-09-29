@@ -8,12 +8,22 @@ async function calculateSupply(fromDate, toDate) {
   // ORDERS
   const daysCovered = ozon.calculateDaysCovered(fromDate, toDate);
   console.log(`Days covered: ${daysCovered}`);
-  let orders = await ozon.getAllFboOrders(fromDate, toDate);
-  console.log(`Found ${orders.length} orders`);
-  orders = orders.filter(o => o.status !== 'cancelled');
-  console.log(`Found not cancelled ${orders.length} orders`);
-  const orderedProducts = ozon.getFlattenedOrderedProducts(orders);
-  const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(orderedProducts, daysCovered);
+
+  // FBO
+  let fboOrders = await ozon.getAllFboOrders(fromDate, toDate);
+  console.log(`Found FBO ${fboOrders.length} orders`);
+  orders = fboOrders.filter(o => o.status !== 'cancelled');
+  console.log(`Found not cancelled ${fboOrders.length} FBO orders`);
+
+  // FBS
+  let fbsOrders = await ozon.getAllFbsOrders(fromDate, toDate);
+  console.log(`Found FBS ${fbsOrders.length} orders`);
+  fbsOrders = fbsOrders.filter(o => o.status !== 'cancelled');
+  console.log(`Found not cancelled ${fbsOrders.length} FBS orders`);
+
+  const fboOrderedProducts = ozon.getFlattenedOrderedProducts(fboOrders);
+  const fbsOrderedProductsFBS = ozon.getFlattenedOrderedProducts(fbsOrders);
+  const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(fboOrderedProducts, fbsOrderedProductsFBS, daysCovered);
 
   // STOCKS
   const clusters = await ozon.getClustersAndWarehouses();
@@ -23,13 +33,13 @@ async function calculateSupply(fromDate, toDate) {
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster);
 
   // EXPORT TO EXCEL
-  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'orders_with_stocks.xlsx');
+  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'fbs_fbo_orders_with_stocks.xlsx');
 }
 
 async function main() {
   console.log("Starting...");
 
-  await calculateSupply('2025-08-01T00:00:00.000Z', '2025-08-31T23:59:59.000Z');
+  await calculateSupply('2025-09-01T00:00:00.000Z', '2025-09-29T23:59:59.000Z');
 
 
   // const response = await ozon.getProducts(3);

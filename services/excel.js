@@ -127,17 +127,17 @@ class Excel {
     const clusterNames = [...configClusters, ...remainingClusters];
 
     // Create 2-level headers
-    // Level 1: Product info + cluster names (each spanning 3 columns)
+    // Level 1: Product info + cluster names (each spanning 4 columns)
     const headerRow1 = ['Товар', ''];
     clusterNames.forEach(cluster => {
-      headerRow1.push(cluster, '', ''); // Cluster spans 3 columns
+      headerRow1.push(cluster, '', '', ''); // Cluster spans 4 columns
     });
     worksheet.addRow(headerRow1);
 
     // Level 2: Product details + sales metrics for each cluster
     const headerRow2 = ['Артикул', 'Название'];
     clusterNames.forEach(cluster => {
-      headerRow2.push('Заказов', 'Дневные', 'Остаток');
+      headerRow2.push('FBO', 'FBS', 'Дневные', 'Остаток');
     });
     worksheet.addRow(headerRow2);
 
@@ -156,7 +156,7 @@ class Excel {
     // Merge cells for cluster headers (level 1) with alternating colors
     let colIndex = 3; // Start after 'Артикул' and 'Товар'
     clusterNames.forEach((cluster, clusterIndex) => {
-      worksheet.mergeCells(1, colIndex, 1, colIndex + 2); // Merge 3 columns
+      worksheet.mergeCells(1, colIndex, 1, colIndex + 3); // Merge 4 columns
       const cell = worksheet.getCell(1, colIndex);
       cell.value = cluster;
       cell.alignment = { horizontal: 'center' };
@@ -169,7 +169,7 @@ class Excel {
         pattern: 'solid',
         fgColor: { argb: isEven ? 'FFFFF2CC' : 'FFE8F5E8' } // Light yellow / Light green
       };
-      colIndex += 3;
+      colIndex += 4;
     });
 
     // Style second header row with alternating colors
@@ -196,7 +196,7 @@ class Excel {
       const isEven = clusterIndex % 2 === 0;
       const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const cell = row2.getCell(colIndex + i);
         cell.fill = {
           type: 'pattern',
@@ -204,7 +204,7 @@ class Excel {
           fgColor: { argb: bgColor }
         };
       }
-      colIndex += 3;
+      colIndex += 4;
     });
 
     // Add data rows with alternating cluster colors
@@ -215,12 +215,13 @@ class Excel {
         const clusterData = product.clusters[clusterName];
         if (clusterData) {
           rowData.push(
-            clusterData.total || 0,
+            clusterData.fboTotal || 0,
+            clusterData.fbsTotal || 0,
             Math.round(clusterData.daily * 1000) / 1000, // Round to 3 decimals
             clusterData.stock || 0
           );
         } else {
-          rowData.push(0, 0, 0);
+          rowData.push(0, 0, 0, 0);
         }
       });
 
@@ -232,7 +233,7 @@ class Excel {
         const isEven = clusterIndex % 2 === 0;
         const bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
           const cell = dataRow.getCell(colIndex + i);
           cell.fill = {
             type: 'pattern',
@@ -245,7 +246,7 @@ class Excel {
             cell.font = { color: { argb: 'FF999999' } }; // Gray color for zeros
           }
         }
-        colIndex += 3;
+        colIndex += 4;
       });
     });
 
