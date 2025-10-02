@@ -258,9 +258,9 @@ class Excel {
       worksheet.getColumn(i).width = 10;
     }
 
-    // Freeze the header rows (first 2 rows)
+    // Freeze the header rows (first 2 rows) and first column (Артикул)
     worksheet.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 2 }
+      { state: 'frozen', xSplit: 1, ySplit: 2 }
     ];
 
     await workbook.xlsx.writeFile(filename);

@@ -3,26 +3,46 @@ const Excel = require('./services/excel');
 const json = o => JSON.stringify(o, null, 2)
 const ozon = new Ozon();
 
-async function calculateSupply(fromDate, toDate) {
-  // ORDERS
-  const daysCovered = ozon.calculateDaysCovered(fromDate, toDate);
+function calculateDateRange(daysCovered) {
+  const toDate = new Date();
+  toDate.setHours(23, 59, 59, 999);
+  toDate.setDate(toDate.getDate() - 1); // Yesterday
+
+  const fromDate = new Date(toDate);
+  fromDate.setDate(fromDate.getDate() - daysCovered + 1);
+  fromDate.setHours(0, 0, 0, 0);
+
+  return { fromDate, toDate };
+}
+
+function formatDate(date) {
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = months[date.getMonth()];
+  return `${day}${month}`;
+}
+
+async function calculateSupply(daysCovered) {
+  const { fromDate, toDate } = calculateDateRange(daysCovered);
+
+  console.log(`Analyzing period: ${fromDate.toISOString()} to ${toDate.toISOString()}`);
   console.log(`Days covered: ${daysCovered}`);
 
   // FBO
-  let fboOrders = await ozon.getAllFboOrders(fromDate, toDate);
+  let fboOrders = await ozon.getAllFboOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found FBO ${fboOrders.length} orders`);
   orders = fboOrders.filter(o => o.status !== 'cancelled');
   console.log(`Found not cancelled ${fboOrders.length} FBO orders`);
 
   // FBS
-  let fbsOrders = await ozon.getAllFbsOrders(fromDate, toDate);
+  let fbsOrders = await ozon.getAllFbsOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found FBS ${fbsOrders.length} orders`);
   fbsOrders = fbsOrders.filter(o => o.status !== 'cancelled');
   console.log(`Found not cancelled ${fbsOrders.length} FBS orders`);
 
   const fboOrderedProducts = ozon.getFlattenedOrderedProducts(fboOrders);
-  const fbsOrderedProductsFBS = ozon.getFlattenedOrderedProducts(fbsOrders);
-  const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(fboOrderedProducts, fbsOrderedProductsFBS, daysCovered);
+  const fbsOrderedProducts = ozon.getFlattenedOrderedProducts(fbsOrders);
+  const orderedProductsByCluster = ozon.calculateProductQuantityByCluster(fboOrderedProducts, fbsOrderedProducts, daysCovered);
 
   // WH
   const clusters = await ozon.getClustersAndWarehouses();
@@ -41,7 +61,8 @@ async function calculateSupply(fromDate, toDate) {
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
 
   // EXPORT TO EXCEL
-  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, 'fbs_fbo_orders_with_stocks_and_transit.xlsx');
+  const filename = `report_${formatDate(fromDate)}-${formatDate(toDate)}.xlsx`;
+  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, filename);
 
   // Print API call count
   console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
@@ -50,7 +71,7 @@ async function calculateSupply(fromDate, toDate) {
 async function main() {
   console.log("Starting...");
 
-  await calculateSupply('2025-09-01T00:00:00.000Z', '2025-09-29T23:59:59.000Z');
+  await calculateSupply(28);
 
 
   // const response = await ozon.getProducts(3);
