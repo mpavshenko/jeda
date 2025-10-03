@@ -823,7 +823,6 @@ class Ozon {
   // Get all supply orders with only necessary data
   async getAllSupplyOrders() {
     const supplyOrderIds = await this.getSupplyOrderIds();
-    console.log(supplyOrderIds);
     console.log(`Found ${supplyOrderIds.length} supply orders`);
 
     const orders = await this.getSupplyOrdersInfo(supplyOrderIds);

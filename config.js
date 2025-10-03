@@ -6,7 +6,7 @@ const ozonConfig = {
   apiKey: process.env.OZON_API_KEY,
 
   // Rate limiting
-  requestDelay: 400, // ms between requests
+  requestDelay: 500, // ms between requests
   maxRetries: 3,
 
   // Business logic constants

@@ -22,6 +22,30 @@ function formatDate(date) {
   return `${day}${month}`;
 }
 
+function calculateSupplyMetrics(ordersWithStocks) {
+  const FBO_STOCK_SUPPLY_DAYS = 28;
+  const FBO_SUPPLY_DAYS = 14;
+  // const FBO_SAFETY_STOCK_DAYS = 5;
+
+  ordersWithStocks.forEach(product => {
+    /*
+      {
+        "fboTotal": 0,
+        "fbsTotal": 1,
+        "total": 1,
+        "daily": 0.03225806451612903,
+        "stock": 2,
+        "in_transit": 0
+      }
+    */
+    Object.values(product.clusters).forEach(x => {
+      const demandedStock = x.daily * FBO_STOCK_SUPPLY_DAYS - x.in_transit;
+      const remainingStock = Math.max(0, x.stock - FBO_SUPPLY_DAYS * x.daily);
+      x.supply = Math.round(demandedStock - remainingStock);
+    });
+  });
+}
+
 async function calculateSupply(daysCovered) {
   const { fromDate, toDate } = calculateDateRange(daysCovered);
 
@@ -59,6 +83,7 @@ async function calculateSupply(daysCovered) {
 
   // MERGE
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
+  calculateSupplyMetrics(ordersWithStocks);
 
   // EXPORT TO EXCEL
   const filename = `report_${formatDate(fromDate)}-${formatDate(toDate)}.xlsx`;
