@@ -3,13 +3,13 @@ const Excel = require('./services/excel');
 const json = o => JSON.stringify(o, null, 2)
 const ozon = new Ozon();
 
-function calculateDateRange(daysCovered) {
+function getDateRangeFromYesterday(days) {
   const toDate = new Date();
   toDate.setHours(23, 59, 59, 999);
   toDate.setDate(toDate.getDate() - 1); // Yesterday
 
   const fromDate = new Date(toDate);
-  fromDate.setDate(fromDate.getDate() - daysCovered + 1);
+  fromDate.setDate(fromDate.getDate() - days + 1);
   fromDate.setHours(0, 0, 0, 0);
 
   return { fromDate, toDate };
@@ -22,10 +22,9 @@ function formatDate(date) {
   return `${day}${month}`;
 }
 
-function calculateSupplyMetrics(ordersWithStocks) {
-  const FBO_STOCK_SUPPLY_DAYS = 28;
-  const FBO_SUPPLY_DAYS = 14;
-  // const FBO_SAFETY_STOCK_DAYS = 5;
+function calculateSupplyNeeds(ordersWithStocks) {
+  const STOCK_COVERAGE_DAYS = 28;
+  const FBO_FULFILLMENT_LEAD_TIME_DAYS = 14;
 
   ordersWithStocks.forEach(product => {
     /*
@@ -39,15 +38,15 @@ function calculateSupplyMetrics(ordersWithStocks) {
       }
     */
     Object.values(product.clusters).forEach(x => {
-      const demandedStock = x.daily * FBO_STOCK_SUPPLY_DAYS - x.in_transit;
-      const remainingStock = Math.max(0, x.stock - FBO_SUPPLY_DAYS * x.daily);
+      const demandedStock = x.daily * STOCK_COVERAGE_DAYS - x.in_transit;
+      const remainingStock = Math.max(0, x.stock - FBO_FULFILLMENT_LEAD_TIME_DAYS * x.daily);
       x.supply = Math.round(demandedStock - remainingStock);
     });
   });
 }
 
-async function calculateSupply(daysCovered) {
-  const { fromDate, toDate } = calculateDateRange(daysCovered);
+async function fulfillmentReport(daysCovered) {
+  const { fromDate, toDate } = getDateRangeFromYesterday(daysCovered);
 
   console.log(`Analyzing period: ${fromDate.toISOString()} to ${toDate.toISOString()}`);
   console.log(`Days covered: ${daysCovered}`);
@@ -83,11 +82,20 @@ async function calculateSupply(daysCovered) {
 
   // MERGE
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
-  calculateSupplyMetrics(ordersWithStocks);
+  calculateSupplyNeeds(ordersWithStocks);
 
   // EXPORT TO EXCEL
-  const filename = `report_${formatDate(fromDate)}-${formatDate(toDate)}.xlsx`;
-  await Excel.exportOrdersWithStocksToExcel(ordersWithStocks, filename);
+  const dateRange = `${formatDate(fromDate)}-${formatDate(toDate)}`;
+  const filename = `fulfillment_${dateRange}.xlsx`;
+  await Excel.exportFulfillmentReport(ordersWithStocks, filename);
+
+  // Export individual cluster reports
+  console.log('\nGenerating cluster supply reports...');
+  const clusterNames = clusters.map(c => c.cluster_name);
+  for (const clusterName of clusterNames) {
+    const clusterFilename = `fulfillment_${clusterName}_${dateRange}.xlsx`;
+    await Excel.exportClusterFulfillmentReport(clusterName, ordersWithStocks, clusterFilename);
+  }
 
   // Print API call count
   console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
@@ -96,7 +104,7 @@ async function calculateSupply(daysCovered) {
 async function main() {
   console.log("Starting...");
 
-  await calculateSupply(28);
+  await fulfillmentReport(28);
 
 
   // const response = await ozon.getProducts(3);
@@ -150,8 +158,6 @@ async function main() {
 
   // Excel.exportToExcel(orderedProductsByClusterFlat, 'products_by_cluster.xlsx');
   // await Excel.exportToExcelWithHeatmap(orderedProductsByClusterFlat, 'products_by_cluster_heatmap.xlsx');
-
-
 }
 
 

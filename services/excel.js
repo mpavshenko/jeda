@@ -103,7 +103,7 @@ class Excel {
     return filename;
   }
 
-  static async exportOrdersWithStocksToExcel(ordersWithStocks, filename = 'orders_with_stocks.xlsx') {
+  static async exportFulfillmentReport(ordersWithStocks, filename = 'orders_with_stocks.xlsx') {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Orders with Stocks');
 
@@ -280,6 +280,56 @@ class Excel {
 
     await workbook.xlsx.writeFile(filename);
     console.log(`Orders with stocks exported to ${filename}`);
+    return filename;
+  }
+
+  static async exportClusterFulfillmentReport(clusterName, ordersWithStocks, filename) {
+    const clusterData = [];
+
+    ordersWithStocks.forEach(product => {
+      const cluster = product.clusters[clusterName];
+      if (cluster && cluster.supply && cluster.supply > 0) {
+        clusterData.push({
+          'Артикул': product.offer_id,
+          'Имя': product.name,
+          'Количество': cluster.supply
+        });
+      }
+    });
+
+    if (clusterData.length === 0) {
+      console.log(`No supply data for cluster: ${clusterName}`);
+      return null;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(clusterName);
+
+    // Add headers
+    worksheet.columns = [
+      { header: 'Артикул', key: 'Артикул', width: 20 },
+      { header: 'Имя', key: 'Имя', width: 50 },
+      { header: 'Количество', key: 'Количество', width: 15 }
+    ];
+
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
+
+    // Add data
+    clusterData.forEach(row => {
+      const dataRow = worksheet.addRow(row);
+      // Make quantity column bold
+      dataRow.getCell(3).font = { bold: true };
+    });
+
+    await workbook.xlsx.writeFile(filename);
+    console.log(`Created cluster report: ${filename} (${clusterData.length} items)`);
     return filename;
   }
 }
