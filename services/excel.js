@@ -16,98 +16,13 @@ class Excel {
     return filename;
   }
 
-  static async exportToExcelWithHeatmap(data, filename = 'export_heatmap.xlsx') {
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Heatmap');
-
-    if (data.length === 0) return filename;
-
-    // Get ALL possible headers from ALL rows (not just first row)
-    const allHeaders = new Set(['offer_id', 'name']); // Start with known columns
-    data.forEach(row => {
-      Object.keys(row).forEach(key => allHeaders.add(key));
-    });
-    const headers = Array.from(allHeaders);
-    worksheet.addRow(headers);
-
-    // Get all quantity values for color scaling
-    const quantityValues = [];
-    data.forEach(row => {
-      headers.forEach(key => {
-        if (key !== 'offer_id' && key !== 'name' && typeof row[key] === 'number') {
-          quantityValues.push(row[key]);
-        }
-      });
-    });
-
-    const maxQuantity = quantityValues.length > 0 ? Math.max(...quantityValues) : 0;
-    const minQuantity = quantityValues.length > 0 ? Math.min(...quantityValues) : 0;
-
-    // Generate color based on quantity
-    const getColor = (value) => {
-      if (!value || value === 0) return 'FFFFF1';
-      const ratio = (value - minQuantity) / (maxQuantity - minQuantity);
-      const intensity = Math.round(ratio * 200); // 0-200 for better visibility
-      const red = Math.round(255 - (intensity * 0.8)); // Start from light red
-      const green = Math.round(255 - (intensity * 0.3)); // Keep some green
-      const blue = Math.round(255 - intensity); // Reduce blue more
-      return `${red.toString(16).padStart(2, '0')}${green.toString(16).padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`;
-    };
-
-    // Add data rows with formatting
-    data.forEach((row, rowIndex) => {
-      const values = headers.map(header => row[header] || '');
-      const excelRow = worksheet.addRow(values);
-
-      headers.forEach((header, colIndex) => {
-        const cell = excelRow.getCell(colIndex + 1);
-
-        if (header !== 'offer_id' && header !== 'name' && typeof row[header] === 'number' && row[header] > 0) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: `FF${getColor(row[header])}` }
-          };
-          cell.alignment = { horizontal: 'center' };
-        }
-
-        // Remove all borders
-        cell.border = {
-          top: { style: 'none' },
-          left: { style: 'none' },
-          bottom: { style: 'none' },
-          right: { style: 'none' }
-        };
-
-        // Set column width
-        const column = worksheet.getColumn(colIndex + 1);
-        if (header === 'offer_id' || header === 'name') {
-          column.width = 25;
-        } else {
-          column.width = 12;
-        }
-      });
-    });
-
-    // Style header row
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' }
-    };
-
-    await workbook.xlsx.writeFile(filename);
-    console.log(`Heatmap exported to ${filename} (intensity range: ${minQuantity}-${maxQuantity})`);
-    return filename;
-  }
-
-  static async exportFulfillmentReport(ordersWithStocks, filename = 'orders_with_stocks.xlsx') {
+  static async createFulfillmentReportBuffer(ordersWithStocks) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Orders with Stocks');
 
-    if (ordersWithStocks.length === 0) return filename;
+    if (ordersWithStocks.length === 0) {
+      return await workbook.xlsx.writeBuffer();
+    }
 
     // Get all cluster names from all products (excluding Unknown) and order by config
     const allClusters = new Set();
@@ -278,12 +193,11 @@ class Excel {
       { state: 'frozen', xSplit: 1, ySplit: 2 }
     ];
 
-    await workbook.xlsx.writeFile(filename);
-    console.log(`Orders with stocks exported to ${filename}`);
-    return filename;
+    return await workbook.xlsx.writeBuffer();
   }
 
-  static async exportClusterFulfillmentReport(clusterName, ordersWithStocks, filename) {
+
+  static async createClusterFulfillmentReportBuffer(clusterName, ordersWithStocks) {
     const clusterData = [];
 
     ordersWithStocks.forEach(product => {
@@ -328,9 +242,8 @@ class Excel {
       dataRow.getCell(3).font = { bold: true };
     });
 
-    await workbook.xlsx.writeFile(filename);
-    console.log(`Created cluster report: ${filename} (${clusterData.length} items)`);
-    return filename;
+    console.log(`Created cluster report for ${clusterName} (${clusterData.length} items)`);
+    return await workbook.xlsx.writeBuffer();
   }
 }
 

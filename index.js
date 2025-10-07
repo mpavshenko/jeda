@@ -22,10 +22,7 @@ function formatDate(date) {
   return `${day}${month}`;
 }
 
-function calculateSupplyNeeds(ordersWithStocks) {
-  const STOCK_COVERAGE_DAYS = 28;
-  const FBO_FULFILLMENT_LEAD_TIME_DAYS = 14;
-
+function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays) {
   ordersWithStocks.forEach(product => {
     /*
       {
@@ -38,14 +35,14 @@ function calculateSupplyNeeds(ordersWithStocks) {
       }
     */
     Object.values(product.clusters).forEach(x => {
-      const demandedStock = x.daily * STOCK_COVERAGE_DAYS - x.in_transit;
-      const remainingStock = Math.max(0, x.stock - FBO_FULFILLMENT_LEAD_TIME_DAYS * x.daily);
+      const demandedStock = x.daily * stockCoverageDays - x.in_transit;
+      const remainingStock = Math.max(0, x.stock - fulfillmentLeadTimeDays * x.daily);
       x.supply = Math.round(demandedStock - remainingStock);
     });
   });
 }
 
-async function fulfillmentReport(daysCovered) {
+async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
   const { fromDate, toDate } = getDateRangeFromYesterday(daysCovered);
 
   console.log(`Analyzing period: ${fromDate.toISOString()} to ${toDate.toISOString()}`);
@@ -54,7 +51,7 @@ async function fulfillmentReport(daysCovered) {
   // FBO
   let fboOrders = await ozon.getAllFboOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found FBO ${fboOrders.length} orders`);
-  orders = fboOrders.filter(o => o.status !== 'cancelled');
+  fboOrders = fboOrders.filter(o => o.status !== 'cancelled');
   console.log(`Found not cancelled ${fboOrders.length} FBO orders`);
 
   // FBS
@@ -82,85 +79,54 @@ async function fulfillmentReport(daysCovered) {
 
   // MERGE
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
-  calculateSupplyNeeds(ordersWithStocks);
-
-  // EXPORT TO EXCEL
-  const dateRange = `${formatDate(fromDate)}-${formatDate(toDate)}`;
-  const filename = `fulfillment_${dateRange}.xlsx`;
-  await Excel.exportFulfillmentReport(ordersWithStocks, filename);
-
-  // Export individual cluster reports
-  console.log('\nGenerating cluster supply reports...');
-  const clusterNames = clusters.map(c => c.cluster_name);
-  for (const clusterName of clusterNames) {
-    const clusterFilename = `fulfillment_${clusterName}_${dateRange}.xlsx`;
-    await Excel.exportClusterFulfillmentReport(clusterName, ordersWithStocks, clusterFilename);
-  }
+  calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays);
 
   // Print API call count
   console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
+
+  return {
+    ordersWithStocks,
+    clusterNames: clusters.map(c => c.cluster_name),
+    fromDate,
+    toDate
+  };
+}
+
+async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
+  const fs = require('fs').promises;
+
+  const {
+    ordersWithStocks,
+    clusterNames,
+    fromDate,
+    toDate
+  } = await calculateFulfillmentData(daysCovered, stockCoverageDays, fulfillmentLeadTimeDays);
+
+  const dateRange = `${formatDate(fromDate)}-${formatDate(toDate)}`;
+
+  console.log('\nGenerating main supply report...');
+  const mainBuffer = await Excel.createFulfillmentReportBuffer(ordersWithStocks);
+
+  const fname = `fulfillment_${dateRange}.xlsx`;
+  await fs.writeFile(fname, mainBuffer);
+  console.log(`Saved: ${fname}`);
+
+  console.log('\nGenerating cluster supply reports...');
+  for (const clusterName of clusterNames) {
+    const clusterBuffer = await Excel.createClusterFulfillmentReportBuffer(clusterName, ordersWithStocks);
+    if (clusterBuffer) {
+      const fname = `fulfillment_${clusterName}_${dateRange}.xlsx`;
+      await fs.writeFile(fname, clusterBuffer);
+      console.log(`Saved: ${fname}`);
+    }
+  }
 }
 
 async function main() {
   console.log("Starting...");
 
-  await fulfillmentReport(28);
-
-
-  // const response = await ozon.getProducts(3);
-  // console.log(json(response));
-
-
-  //=================================== STOCKS
-  // const products = await ozon.getAllProducts();
-  // const nameByOfferId = ozon.createOfferIdToNameMap(products);
-  // console.log(json(nameByOfferId));
-
-
-
-
-  // const clusters = await ozon.getClustersAndWarehouses();
-  // const w2c = ozon.createWarehouseToClusterMap(clusters);
-  // console.log(json(w2c));
-
-  // const allStocks = await ozon.getAllStocks();
-  // const stocksByCluster = ozon.calculateStocksByCluster(allStocks, w2c);
-  // console.log(json(stocksByCluster));
-
-  // flatStocks = ozon.transformStocksByClusterToFlat(stocksByCluster, nameByOfferId);
-  // console.log(flatStocks[0]);
-
-  // Excel.exportToExcel(flatStocks, 'stocks_by_cluster.xlsx');
-  // await Excel.exportToExcelWithHeatmap(flatStocks, 'stocks_by_cluster_heatmap.xlsx');
-
-  //=================================== ORDERS
-
-  // let orders = await ozon.getAllFboOrders('2025-06-01T00:00:00.000Z', '2025-08-31T23:59:59.000Z');
-  // console.log(`Found ${orders.length} orders`);
-  // orders = orders.filter(o => o.status == 'cancelled');
-  // console.log(`Found not cancelled ${orders.length} orders`);
-  // console.log(JSON.stringify(orders, null, 2));
-
-  // if (orders.length > 0) {
-  //   console.log(json(orders[0]));
-  // }
-
-  // const orderedProducts = ozon.getFlattenedOrderedProductsFunctional(orders);
-  // console.log(json(orderedProducts[0]));
-  // console.table(orderedProducts);
-
-  // const orderedProductsByCluster = ozon.calculateProductQuantityByClusterFunctional(orderedProducts);
-  // console.log(json(orderedProductsByCluster));
-  // console.table(orderedProductsByCluster);
-
-  // const orderedProductsByClusterFlat = ozon.calculateProductQuantityByClusterFlat(orderedProducts);
-  // console.table(orderedProductsByClusterFlat);
-
-  // Excel.exportToExcel(orderedProductsByClusterFlat, 'products_by_cluster.xlsx');
-  // await Excel.exportToExcelWithHeatmap(orderedProductsByClusterFlat, 'products_by_cluster_heatmap.xlsx');
+  await fulfillmentReport();
 }
-
-
 
 main().catch(error => {
   console.error('Unhandled error:', error);
