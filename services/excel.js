@@ -42,21 +42,21 @@ class Excel {
     const clusterNames = [...configClusters, ...remainingClusters];
 
     // Create 2-level headers
-    // Level 1: Product info + cluster names (each spanning 6 columns)
-    const headerRow1 = ['Товар', ''];
+    // Level 1: Product info + 1C + cluster names (each spanning 6 columns)
+    const headerRow1 = ['Товар', '', '1C', ''];
     clusterNames.forEach(cluster => {
       headerRow1.push(cluster, '', '', '', '', ''); // Cluster spans 6 columns
     });
     worksheet.addRow(headerRow1);
 
-    // Level 2: Product details + sales metrics for each cluster
-    const headerRow2 = ['Артикул', 'Название'];
+    // Level 2: Product details + 1C details + sales metrics for each cluster
+    const headerRow2 = ['Артикул', 'Название', 'Цена', 'Остаток'];
     clusterNames.forEach(cluster => {
       headerRow2.push('FBO', 'FBS', 'Дневные', 'Остаток', 'В пути', 'Отправить');
     });
     worksheet.addRow(headerRow2);
 
-    // Merge cells for "Товар" header (spans Артикул and Товар columns)
+    // Merge cells for "Товар" header (spans Артикул and Название columns)
     worksheet.mergeCells(1, 1, 1, 2);
     const productHeaderCell = worksheet.getCell(1, 1);
     productHeaderCell.value = 'Товар';
@@ -68,8 +68,20 @@ class Excel {
       fgColor: { argb: 'FFDDDDDD' } // Light gray for product section
     };
 
+    // Merge cells for "1C" header (spans Цена and Остаток columns)
+    worksheet.mergeCells(1, 3, 1, 4);
+    const oneCHeaderCell = worksheet.getCell(1, 3);
+    oneCHeaderCell.value = '1C';
+    oneCHeaderCell.alignment = { horizontal: 'center' };
+    oneCHeaderCell.font = { bold: true };
+    oneCHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+
     // Merge cells for cluster headers (level 1) with alternating colors
-    let colIndex = 3; // Start after 'Артикул' and 'Товар'
+    let colIndex = 5; // Start after 'Артикул', 'Название', 'Цена', 'Остаток'
     clusterNames.forEach((cluster, clusterIndex) => {
       worksheet.mergeCells(1, colIndex, 1, colIndex + 5); // Merge 6 columns
       const cell = worksheet.getCell(1, colIndex);
@@ -105,8 +117,22 @@ class Excel {
       fgColor: { argb: 'FFDDDDDD' } // Light gray
     };
 
+    // Style 1C columns in second header row
+    const priceCell = row2.getCell(3);
+    const amountCell = row2.getCell(4);
+    priceCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue
+    };
+    amountCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue
+    };
+
     // Apply alternating colors to cluster columns in second header row
-    colIndex = 3;
+    colIndex = 5;
     clusterNames.forEach((cluster, clusterIndex) => {
       const isEven = clusterIndex % 2 === 0;
       const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
@@ -124,11 +150,14 @@ class Excel {
 
     // Add data rows with alternating cluster colors
     ordersWithStocks.forEach(product => {
-      const rowData = [product.offer_id, product.name];
+      const rowData = [product.offer_id, product.name, product.price_1c || '', product.amount_1c || ''];
 
+      // Calculate total supply across all clusters
+      let totalSupply = 0;
       clusterNames.forEach(clusterName => {
         const clusterData = product.clusters[clusterName];
         if (clusterData) {
+          totalSupply += clusterData.supply || 0;
           rowData.push(
             clusterData.fboTotal || 0,
             clusterData.fbsTotal || 0,
@@ -144,11 +173,36 @@ class Excel {
 
       const dataRow = worksheet.addRow(rowData);
 
+      // Check if amount_1c > total supply, highlight row with red
+      const shouldHighlight = product.amount_1c && product.amount_1c < totalSupply;
+
+      // Style 1C columns
+      const priceCell = dataRow.getCell(3);
+      const amountCell = dataRow.getCell(4);
+
+      const oneCBgColor = shouldHighlight ? 'FFFFE0E0' : 'FFF0F0FF'; // Red if highlighted, light blue otherwise
+
+      priceCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: oneCBgColor }
+      };
+      priceCell.numFmt = '#,##0.00'; // Format as money with 2 decimal places
+
+      amountCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: oneCBgColor }
+      };
+
       // Apply alternating cluster colors and gray font for zeros
-      let colIndex = 3;
+      let colIndex = 5;
       clusterNames.forEach((cluster, clusterIndex) => {
         const isEven = clusterIndex % 2 === 0;
-        const bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
+        let bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
+        if (shouldHighlight) {
+          bgColor = 'FFFFE0E0'; // Light red if highlighted
+        }
 
         for (let i = 0; i < 6; i++) {
           const cell = dataRow.getCell(colIndex + i);
@@ -183,8 +237,10 @@ class Excel {
 
     // Set column widths
     worksheet.getColumn(1).width = 15; // Артикул
-    worksheet.getColumn(2).width = 45; // Товар (made bigger)
-    for (let i = 3; i <= headerRow2.length; i++) {
+    worksheet.getColumn(2).width = 45; // Название
+    worksheet.getColumn(3).width = 10; // Цена
+    worksheet.getColumn(4).width = 10; // Остаток (1C)
+    for (let i = 5; i <= headerRow2.length; i++) {
       worksheet.getColumn(i).width = 10;
     }
 

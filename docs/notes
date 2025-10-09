@@ -1,0 +1,11 @@
+http://192.168.107.5:8080/UT11_Jeda/hs/service/get_stock/
+
+
+http://ts.jedatools.ru:8080/UT11_Jeda/hs/service/get_stock/
+
+login hs_service
+passwd 0710
+
+
+curl -v -u hs_service:0710 http://ts.jedatools.ru:8080/UT11_Jeda/hs/service/get_stock/
+

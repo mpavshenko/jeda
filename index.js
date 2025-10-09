@@ -1,7 +1,10 @@
 const Ozon = require('./services/ozon');
 const Excel = require('./services/excel');
+const OneC = require('./services/1c');
+const { on } = require('events');
 const json = o => JSON.stringify(o, null, 2)
 const ozon = new Ozon();
+const oneC = new OneC();
 
 function getDateRangeFromYesterday(days) {
   const toDate = new Date();
@@ -19,7 +22,28 @@ function formatDate(date) {
   const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const day = date.getDate().toString().padStart(2, '0');
   const month = months[date.getMonth()];
-  return `${day}${month}`;
+  return `${month}-${day}`;
+}
+
+function merge1CStock(ordersWithStocks, oneCStocks) {
+  const stockByArticul = {};
+  oneCStocks.forEach(item => {
+    stockByArticul[item.Articul] = {
+      price: parseFloat(item.Price.replace(',', '.')),
+      amount: item.Amount
+    };
+  });
+
+  ordersWithStocks.forEach(product => {
+    const stock1C = stockByArticul[product.offer_id];
+    if (stock1C) {
+      product.price_1c = stock1C.price;
+      product.amount_1c = stock1C.amount;
+    } else {
+      product.price_1c = null;
+      product.amount_1c = null;
+    }
+  });
 }
 
 function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays) {
@@ -51,13 +75,13 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
   // FBO
   let fboOrders = await ozon.getAllFboOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found FBO ${fboOrders.length} orders`);
-  fboOrders = fboOrders.filter(o => o.status !== 'cancelled');
+  // fboOrders = fboOrders.filter(o => o.status !== 'cancelled');
   console.log(`Found not cancelled ${fboOrders.length} FBO orders`);
 
   // FBS
   let fbsOrders = await ozon.getAllFbsOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found FBS ${fbsOrders.length} orders`);
-  fbsOrders = fbsOrders.filter(o => o.status !== 'cancelled');
+  // fbsOrders = fbsOrders.filter(o => o.status !== 'cancelled');
   console.log(`Found not cancelled ${fbsOrders.length} FBS orders`);
 
   const fboOrderedProducts = ozon.getFlattenedOrderedProducts(fboOrders);
@@ -81,6 +105,11 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
   calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays);
 
+  // 1C STOCK
+  const oneCStocks = await oneC.getStock();
+  console.log(`Found ${oneCStocks.length} products in 1C stock`);
+  merge1CStock(ordersWithStocks, oneCStocks);
+
   // Print API call count
   console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
 
@@ -94,6 +123,7 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
 
 async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
   const fs = require('fs').promises;
+  const path = require('path');
 
   const {
     ordersWithStocks,
@@ -102,12 +132,17 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
     toDate
   } = await calculateFulfillmentData(daysCovered, stockCoverageDays, fulfillmentLeadTimeDays);
 
-  const dateRange = `${formatDate(fromDate)}-${formatDate(toDate)}`;
+  const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
+  const outputDir = path.join(process.cwd(), dateRange);
+
+  // Create directory if it doesn't exist
+  await fs.mkdir(outputDir, { recursive: true });
+  console.log(`Created directory: ${dateRange}/`);
 
   console.log('\nGenerating main supply report...');
   const mainBuffer = await Excel.createFulfillmentReportBuffer(ordersWithStocks);
 
-  const fname = `fulfillment_${dateRange}.xlsx`;
+  const fname = path.join(outputDir, `fulfillment_${dateRange}.xlsx`);
   await fs.writeFile(fname, mainBuffer);
   console.log(`Saved: ${fname}`);
 
@@ -115,7 +150,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   for (const clusterName of clusterNames) {
     const clusterBuffer = await Excel.createClusterFulfillmentReportBuffer(clusterName, ordersWithStocks);
     if (clusterBuffer) {
-      const fname = `fulfillment_${clusterName}_${dateRange}.xlsx`;
+      const fname = path.join(outputDir, `fulfillment_${clusterName}_${dateRange}.xlsx`);
       await fs.writeFile(fname, clusterBuffer);
       console.log(`Saved: ${fname}`);
     }
