@@ -44,18 +44,5 @@ module.exports = {
     // Advanced features
     instance_var: 'INSTANCE_ID',
     combine_logs: true
-  }],
-
-  deploy: {
-    production: {
-      user: 'mike',
-      host: 'bo.jedatools.ru',
-      port: 2022,
-      ref: 'origin/master',
-      repo: 'git@github.com:mpavshenko/jeda.git',
-      path: '/home/mike/jeda-seller',
-      'post-deploy': 'npm install --production && pm2 reload ecosystem.config.js --env production && pm2 save',
-      'pre-setup': 'mkdir -p /home/mike/jeda-seller'
-    }
-  }
+  }]
 };

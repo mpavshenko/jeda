@@ -16,3 +16,9 @@ $ pm2 save
 
 [PM2] Remove init script via:
 $ pm2 unstartup systemd
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPAeeoFUPW++lRZ/+WNU2RLDZ6t8kzjqH671BB91wQPn m.pavshenko@gmail.com
+
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPAeeoFUPW++lRZ/+WNU2RLDZ6t8kzjqH671BB91wQPn m.pavshenko@gmail.com" >> ~/.ssh/authorized_keys
+
+ssh -p 2022 mike@bo.jedatools.ru
