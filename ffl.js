@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const Ozon = require('./services/ozon');
 const Excel = require('./services/excel');
 const OneC = require('./services/1c');

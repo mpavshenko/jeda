@@ -11,7 +11,8 @@ module.exports = {
     // Environment variables
     env: {
       NODE_ENV: 'production',
-      PORT: 80
+      PORT: 80,
+      TZ: 'Europe/Moscow'
     },
 
     // Logging configuration
