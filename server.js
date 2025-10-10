@@ -3,12 +3,22 @@ const cron = require('node-cron');
 const cronstrue = require('cronstrue');
 const path = require('path');
 const serveIndex = require('serve-index');
+const basicAuth = require('express-basic-auth');
 const config = require('./config');
 const { fulfillmentReport } = require('./ffl');
 const { version } = require('./package.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Basic auth middleware for protected routes
+const auth = basicAuth({
+  users: {
+    [process.env.BASIC_AUTH_USER || 'jeda']: process.env.BASIC_AUTH_PASSWORD || '123456'
+  },
+  challenge: true,
+  realm: 'Jeda Seller Reports'
+});
 
 // Schedule report generation
 cron.schedule(config.cronSchedule, async () => {
@@ -21,18 +31,18 @@ cron.schedule(config.cronSchedule, async () => {
   }
 });
 
-// Serve static files from reports directory (for browsing)
+// Serve static files from reports directory (for browsing) - with auth
 const reportsPath = path.join(__dirname, 'reports');
-app.use('/reports', express.static(reportsPath));
-app.use('/reports', serveIndex(reportsPath, {
+app.use('/reports', auth, express.static(reportsPath));
+app.use('/reports', auth, serveIndex(reportsPath, {
   icons: true,
   view: 'details'
 }));
 
-// Serve logs directory (for browsing)
+// Serve logs directory (for browsing) - with auth
 const logsPath = path.join(__dirname, 'logs');
-app.use('/logs', express.static(logsPath));
-app.use('/logs', serveIndex(logsPath, {
+app.use('/logs', auth, express.static(logsPath));
+app.use('/logs', auth, serveIndex(logsPath, {
   icons: true,
   view: 'details'
 }));
