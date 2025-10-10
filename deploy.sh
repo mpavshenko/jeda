@@ -22,7 +22,7 @@ ssh -p 2022 mike@bo.jedatools.ru << 'EOF'
 
   echo "🔄 Pulling latest changes..."
   git fetch origin
-  git reset --hard origin/master
+  git reset --hard origin/main
 
   echo "📦 Installing dependencies..."
   npm install --production
