@@ -12,7 +12,8 @@
     "pm2:restart": "pm2 restart jeda-seller",
     "pm2:logs": "pm2 logs jeda-seller",
     "pm2:monit": "pm2 monit",
-    "deploy": "./deploy.sh"
+    "deploy": "./deploy.sh",
+    "update": "./update.sh"
   },
   "dependencies": {
     "axios": "^1.6.0",
