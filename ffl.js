@@ -71,6 +71,7 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
   const { fromDate, toDate } = getDateRangeFromYesterday(daysCovered);
 
   console.log(`Analyzing period: ${fromDate.toISOString()} to ${toDate.toISOString()}`);
+  console.log(`Local time: ${fromDate.toLocaleString()} to ${toDate.toLocaleString()}`);
   console.log(`Days covered: ${daysCovered}`);
 
   // FBO
