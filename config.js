@@ -32,7 +32,11 @@ const ozonConfig = {
     "Сибирь": 10,
     "Юг": 7,
     "Саратов": 10
-  }
+  },
+
+  // Cron schedule for report generation
+  // cronSchedule: '5 0 * * *'  // Daily at 00:05
+  cronSchedule: '*/5 * * * *'  // Daily at 00:05
 };
 
 module.exports = ozonConfig;

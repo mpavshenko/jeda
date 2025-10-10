@@ -9,3 +9,10 @@ passwd 0710
 
 curl -v -u hs_service:0710 http://ts.jedatools.ru:8080/UT11_Jeda/hs/service/get_stock/
 
+
+
+[PM2] Freeze a process list on reboot via:
+$ pm2 save
+
+[PM2] Remove init script via:
+$ pm2 unstartup systemd

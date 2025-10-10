@@ -3,6 +3,12 @@ node_modules/
 *.log
 .DS_Store
 
+# Reports directory
+reports/
+
+# Logs directory
+logs/
+
 # Excel files (except in docs folder)
 *.xlsx
 *.xls

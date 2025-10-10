@@ -150,7 +150,12 @@ class Excel {
 
     // Add data rows with alternating cluster colors
     ordersWithStocks.forEach(product => {
-      const rowData = [product.offer_id, product.name, product.price_1c || '', product.amount_1c || ''];
+      const rowData = [
+        product.offer_id,
+        product.name,
+        product.price_1c ?? '',
+        product.amount_1c ?? ''
+      ];
 
       // Calculate total supply across all clusters
       let totalSupply = 0;
@@ -173,8 +178,8 @@ class Excel {
 
       const dataRow = worksheet.addRow(rowData);
 
-      // Check if amount_1c > total supply, highlight row with red
-      const shouldHighlight = product.amount_1c && product.amount_1c < totalSupply;
+      // Check if amount_1c < total supply, highlight row with red
+      const shouldHighlight = product.amount_1c != null && product.amount_1c < totalSupply;
 
       // Style 1C columns
       const priceCell = dataRow.getCell(3);
