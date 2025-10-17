@@ -107,6 +107,21 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
   calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays);
 
+  // GET ALL PRODUCTS FOR NAMES
+  const allProducts = await ozon.getAllProducts();
+  console.log(`Found ${allProducts.length} products`);
+  const offerIdToName = allProducts.reduce((map, p) => {
+    map[p.offer_id] = p.name;
+    return map;
+  }, {});
+
+  // PATCH NULL NAMES (for those which only in transit and have no orders)
+  ordersWithStocks.forEach(product => {
+    if (!product.name && offerIdToName[product.offer_id]) {
+      product.name = offerIdToName[product.offer_id];
+    }
+  });
+
   // 1C STOCK
   const oneCStocks = await oneC.getStock();
   console.log(`Found ${oneCStocks.length} products in 1C stock`);

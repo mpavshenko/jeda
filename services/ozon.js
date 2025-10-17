@@ -541,7 +541,7 @@ class Ozon {
         const inTransitData = inTransitByCluster[offerId];
         const product = {
           offer_id: offerId,
-          name: offerId, // No name available for products without orders
+          name: null, // No name available for products without orders
           clusters: {}
         };
 
@@ -861,6 +861,7 @@ class Ozon {
           allBundleItems.push({
             offer_id: item.offer_id,
             quantity: item.quantity,
+            name: item.name,
             storage_warehouse_id: storageWarehouseId
           });
         });
