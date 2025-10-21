@@ -3,28 +3,10 @@ require('dotenv').config();
 const Ozon = require('./services/ozon');
 const Excel = require('./services/excel');
 const OneC = require('./services/1c');
-// const json = o => JSON.stringify(o, null, 2);
+const { getDateRangeFromYesterday, formatDate } = require('./utils/dates');
+
 const ozon = new Ozon();
 const oneC = new OneC();
-
-function getDateRangeFromYesterday(days) {
-  const toDate = new Date();
-  toDate.setHours(23, 59, 59, 999);
-  toDate.setDate(toDate.getDate() - 1); // Yesterday
-
-  const fromDate = new Date(toDate);
-  fromDate.setDate(fromDate.getDate() - days + 1);
-  fromDate.setHours(0, 0, 0, 0);
-
-  return { fromDate, toDate };
-}
-
-function formatDate(date) {
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = months[date.getMonth()];
-  return `${month}-${day}`;
-}
 
 function merge1CStock(ordersWithStocks, oneCStocks) {
   const stockByArticul = {};

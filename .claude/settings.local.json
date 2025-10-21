@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:docs.ozon.ru)"
+      "WebFetch(domain:docs.ozon.ru)",
+      "WebFetch(domain:dev.wildberries.ru)",
+      "WebSearch",
+      "WebFetch(domain:openapi.wildberries.ru)"
     ],
     "deny": [],
     "ask": []
