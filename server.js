@@ -6,7 +6,7 @@ const cronstrue = require('cronstrue');
 const path = require('path');
 const serveIndex = require('serve-index');
 const basicAuth = require('express-basic-auth');
-const config = require('./config');
+const { ozonConfig } = require('./config');
 const { fulfillmentReport } = require('./ffl');
 const { version } = require('./package.json');
 
@@ -23,7 +23,7 @@ const auth = basicAuth({
 });
 
 // Schedule report generation
-cron.schedule(config.cronSchedule, async () => {
+cron.schedule(ozonConfig.cronSchedule, async () => {
   console.log(`Running scheduled fulfillment report...`);
   try {
     await fulfillmentReport();
@@ -73,6 +73,6 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  const cronDescription = cronstrue.toString(config.cronSchedule, { use24HourTimeFormat: true, verbose: true });
-  console.log(`Scheduled report generation: "${config.cronSchedule}" => ${cronDescription}`);
+  const cronDescription = cronstrue.toString(ozonConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
+  console.log(`Scheduled report generation: "${ozonConfig.cronSchedule}" => ${cronDescription}`);
 });

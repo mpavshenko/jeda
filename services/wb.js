@@ -1,4 +1,6 @@
 const axios = require('axios');
+const { formatRFC3339 } = require('../utils/dates');
+const { wbConfig } = require('../config');
 
 class WB {
   constructor() {
@@ -45,40 +47,144 @@ class WB {
     }
   }
 
-  async getAllProducts(options = {}) {
-    try {
-      const {
-        limit = 100,
-        offset = 0,
-        sortColumn = 'updateAt',
-        sortOrder = 'asc',
-        withPhoto = -1
-      } = options;
+  /*
 
-      const requestBody = {
-        settings: {
-          cursor: {
-            limit,
-            updatedAt: offset,
-            nmID: 0
+  /content/v2/get/cards/list
+
+  returns:
+
+  {
+  "cards": [
+        {
+          "nmID": 12345678,
+          "imtID": 123654789,
+          "nmUUID": "01bda0b1-5c0b-736c-b2be-d0a6543e9be",
+          "subjectID": 7771,
+          "subjectName": "AKF системы",
+          "vendorCode": "wb7f6mumjr1",
+          "brand": "Тест",
+          "title": "Тест-система",
+          "description": "Тестовое описание",
+          "needKiz": false,
+          "photos": [],
+          "video": "https://videonme-basket-12.wbbasket.ru/vol137/part22557/225577433/hls/1440p/index.m3u8",
+          "wholesale": {
+            "enabled": true,
+            "quantum": 112
           },
-          filter: {
-            textSearch: '',
-            withPhoto
-          }
-        },
-        sort: {
-          column: sortColumn,
-          order: sortOrder
+          "dimensions": {
+            "length": 55,
+            "width": 40,
+            "height": 15,
+            "weightBrutto": 6.24,
+            "isValid": false
+          },
+          "characteristics": [
+            {
+              "id": 14177449,
+              "name": "Цвет",
+              "value": [
+                "красно-сиреневый"
+              ]
+            }
+          ],
+          "sizes": [
+            {
+              "chrtID": 316399238,
+              "techSize": "0",
+              "skus": [
+                "987456321654"
+              ]
+            }
+          ],
+          "tags": [
+            {
+              "id": 592569,
+              "name": "Популярный",
+              "color": "D1CFD7"
+            }
+          ],
+          "createdAt": "2023-12-06T11:17:00.96577Z",
+          "updatedAt": "2023-12-06T11:17:00.96577Z"
         }
-      };
-
-      const response = await this.contentClient.post('/content/v2/get/cards/list', requestBody);
-      return response.data;
-    } catch (error) {
-      console.error('WB API Error:', error.response?.data || error.message);
-      throw error;
+      ],
+      "cursor": {
+        "updatedAt": "2023-12-06T11:17:00.96577Z",
+        "nmID": 123654123,
+        "total": 1
+      }
     }
+  */
+
+  async getAllCards() {
+    const allProducts = [];
+    let cursor = {
+      limit: 100
+    };
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        const requestBody = {
+          settings: {
+            cursor,
+            filter: {
+              withPhoto: -1
+            }
+          }
+        };
+
+        console.log(`Fetching products batch with cursor:`, JSON.stringify(cursor));
+
+        const response = await this.contentClient.post('/content/v2/get/cards/list', requestBody);
+        const result = response.data || {};
+        const cards = result.cards || [];
+
+        if (cards.length > 0) {
+          allProducts.push(...cards);
+          console.log(`Fetched ${cards.length} products. Total so far: ${allProducts.length}`);
+
+          // Check if there's more data (when we get less than limit, we're done)
+          if (cards.length < cursor.limit) {
+            hasMore = false;
+          } else {
+            // Update cursor with last item's data for next iteration
+            const lastCard = cards[cards.length - 1];
+            cursor = {
+              limit: 100,
+              updatedAt: lastCard.updatedAt,
+              nmID: lastCard.nmID
+            };
+          }
+        } else {
+          hasMore = false;
+        }
+      } catch (error) {
+        console.error('WB API Error:', error.response?.data || error.message);
+        throw error;
+      }
+    }
+
+    console.log(`Successfully fetched all ${allProducts.length} products`);
+    return allProducts;
+  }
+
+  /* Result example:
+  [{
+    article: 'D81703-XXL',
+    name: 'Куртка рабочая 3 в 1 демисезонная с жилеткой'
+  }]
+  */
+  extractProductsFromCards(cards) {
+    return cards.flatMap(card =>
+      card.sizes.map(size => (
+        {
+          article: card.sizes.length === 1
+            ? card.vendorCode
+            : `${card.vendorCode}-${size.techSize}`,
+          name: card.title
+        }
+      )));
   }
 
   getTokenInfo() {
@@ -139,112 +245,22 @@ class WB {
     return scopes.length > 0 ? scopes : ['No scopes detected'];
   }
 
-  /* Get all FBS orders for a date range
-     Result example:
-     [{
-       id: 12345678,
-       article: "D81140-L",
-       nmId: 98765432,
-       warehouseId: 507,
-       offices: ["Коледино"],
-       createdAt: "2024-10-15T10:30:00Z",
-       price: 2500
-     }]
-  */
-  async getAllFbsOrders(dateFrom, dateTo) {
-    const allOrders = [];
-    let next = 0;
-    const limit = 1000;
-    let hasMore = true;
-
-    // Convert Date objects to Unix timestamps
-    const dateFromTs = Math.floor(dateFrom.getTime() / 1000);
-    const dateToTs = Math.floor(dateTo.getTime() / 1000);
-
-    while (hasMore) {
-      console.log(`Fetching FBS orders batch with next: ${next}`);
-
-      try {
-        const response = await this.suppliersClient.get('/api/v3/orders', {
-          params: {
-            limit,
-            next,
-            dateFrom: dateFromTs,
-            dateTo: dateToTs
-          }
-        });
-
-        const result = response.data || {};
-        const orders = result.orders || [];
-
-        if (orders.length > 0) {
-          // Transform to only include used fields
-          const transformedOrders = orders.map(order => ({
-            id: order.id,
-            article: order.article,
-            nmId: order.nmId,
-            warehouseId: order.warehouseId,
-            officeId: order.officeId,
-            offices: order.offices || [],
-            createdAt: order.createdAt,
-            price: order.price,
-            skus: order.skus || []
-          }));
-
-          allOrders.push(...transformedOrders);
-          console.log(`Fetched ${orders.length} FBS orders. Total so far: ${allOrders.length}`);
-
-          // Check if there's more data
-          if (result.next && result.next > 0) {
-            next = result.next;
-          } else {
-            hasMore = false;
-          }
-        } else {
-          hasMore = false;
-        }
-      } catch (error) {
-        console.error(`Error fetching FBS orders at next ${next}:`, error.response?.data || error.message);
-        throw error;
-      }
-    }
-
-    console.log(`Successfully fetched all ${allOrders.length} FBS orders`);
-    return allOrders;
-  }
-
   /* Get all orders (both FBS and FBW) from statistics API with warehouse separation
      This is the recommended method for reporting as it includes all order types.
      Result example:
      [{
-       date: "2024-10-15T10:30:00Z",
-       lastChangeDate: "2024-10-15T12:00:00Z",
-       warehouseName: "Коледино",
-       warehouseType: "FBW",
-       supplierArticle: "D81140-L",
-       nmId: 98765432,
-       barcode: "1234567890123",
-       quantity: 1,
-       totalPrice: 2500,
-       discountPercent: 10,
-       isCancel: false
+        date: '2025-09-23T22:07:10',
+        lastChangeDate: '2025-09-24T00:14:58',
+        warehouseName: 'Тула',
+        warehouseType: 'Склад WB',
+        supplierArticle: 'D81250',
+        techSize: 'XL',
+        isCancel: false
      }]
   */
   async getAllOrders(dateFrom, dateTo) {
     const allOrders = [];
     let currentDateFrom = dateFrom;
-
-    // Format date to RFC3339 (YYYY-MM-DDTHH:MM:SS)
-    const formatRFC3339 = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      const seconds = String(date.getSeconds()).padStart(2, '0');
-      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
-    };
-
     const dateToRFC = formatRFC3339(dateTo);
 
     while (true) {
@@ -279,17 +295,17 @@ class WB {
           warehouseName: order.warehouseName,
           warehouseType: order.warehouseType,
           supplierArticle: order.supplierArticle,
-          nmId: order.nmId,
-          barcode: order.barcode,
-          category: order.category,
-          subject: order.subject,
-          brand: order.brand,
+          // nmId: order.nmId,
+          // barcode: order.barcode,
+          // category: order.category,
+          // subject: order.subject,
+          // brand: order.brand,
           techSize: order.techSize,
-          totalPrice: order.totalPrice,
-          discountPercent: order.discountPercent,
-          priceWithDisc: order.priceWithDisc,
+          // totalPrice: order.totalPrice,
+          // discountPercent: order.discountPercent,
+          // priceWithDisc: order.priceWithDisc,
           isCancel: order.isCancel,
-          cancelDate: order.cancelDate
+          // cancelDate: order.cancelDate
         }));
 
         allOrders.push(...transformedOrders);
@@ -327,6 +343,51 @@ class WB {
 
     console.log(`Successfully fetched all ${allOrders.length} orders from statistics API`);
     return allOrders;
+  }
+
+  /* Create a map from warehouse name to cluster name
+     Result example:
+     {
+       "Пушкино": "Центральный",
+       "Тула": "Центральный",
+       "Казань": "Приволжский",
+       "Минск": "Беларусь"
+     }
+  */
+  createWarehouseToClusterMap() {
+    const map = {};
+
+    Object.entries(wbConfig.clusters).forEach(([clusterName, warehouses]) => {
+      warehouses.forEach(warehouseName => {
+        map[warehouseName] = clusterName;
+      });
+    });
+
+    return map;
+  }
+
+  /* Enrich orders with cluster information
+     Input: orders from getAllOrders
+     Output: orders with cluster field added
+     Result example:
+     [{
+        date: '2025-09-23T22:07:10',
+        lastChangeDate: '2025-09-24T00:14:58',
+        warehouseName: 'Тула',
+        warehouseType: 'Склад WB',
+        supplierArticle: 'D81250',
+        techSize: 'XL',
+        isCancel: false,
+        cluster: 'Центральный'
+      }]
+  */
+  enrichOrdersWithClusters(orders) {
+    const warehouseToCluster = this.createWarehouseToClusterMap();
+
+    return orders.map(order => ({
+      ...order,
+      cluster: warehouseToCluster[order.warehouseName] || 'Unknown'
+    }));
   }
 }
 

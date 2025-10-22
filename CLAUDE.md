@@ -53,3 +53,10 @@ Rate limiting is configured for 200ms delays between requests with up to 3 retri
 The project is configured for consistent 2-space indentation:
 - **VS Code settings**: `.vscode/settings.json` configures editor for 2 spaces, format on save using built-in formatters
 - **EditorConfig**: `.editorconfig` for cross-editor consistency
+
+## Communication Preferences
+
+- **English corrections**: Always provide grammar and writing corrections for all user messages
+- Show corrections at the end of responses in a dedicated "Language Corrections" section
+- Include: spelling errors, missing articles (a/an/the), punctuation, capitalization, and better phrasing suggestions
+- Keep corrections friendly and constructive to help improve English writing skills

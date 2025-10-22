@@ -1,9 +1,9 @@
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
-const config = require('../config');
+const { ozonConfig } = require('../config');
 
 // Cluster order from config.js deliveryDays
-const CLUSTER_ORDER = Object.keys(config.deliveryDays);
+const CLUSTER_ORDER = Object.keys(ozonConfig.deliveryDays);
 
 class Excel {
   static exportToExcel(data, filename = 'export.xlsx') {

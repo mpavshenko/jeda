@@ -1,17 +1,17 @@
 const axios = require('axios');
-const config = require('../config');
+const { ozonConfig } = require('../config');
 
-// const sleep = () => new Promise(r => setTimeout(r, config.requestDelay));
+// const sleep = () => new Promise(r => setTimeout(r, ozonConfig.requestDelay));
 
 class Ozon {
   constructor() {
     this.apiCallCount = 0;
 
     this.client = axios.create({
-      baseURL: config.baseURL,
+      baseURL: ozonConfig.baseURL,
       headers: {
-        'Client-Id': config.clientId,
-        'Api-Key': config.apiKey,
+        'Client-Id': ozonConfig.clientId,
+        'Api-Key': ozonConfig.apiKey,
         'Content-Type': 'application/json'
       }
     });
@@ -22,8 +22,8 @@ class Ozon {
 
       if (this.lastRequestTime) {
         const timeDiff = Date.now() - this.lastRequestTime;
-        if (timeDiff < config.requestDelay) {
-          await new Promise(resolve => setTimeout(resolve, config.requestDelay - timeDiff));
+        if (timeDiff < ozonConfig.requestDelay) {
+          await new Promise(resolve => setTimeout(resolve, ozonConfig.requestDelay - timeDiff));
         }
       }
       this.lastRequestTime = Date.now();
