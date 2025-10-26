@@ -1,41 +1,16 @@
 require('dotenv').config();
 
 const WB = require('./services/wb');
+const OneC = require('./services/1c');
 const { getDateRangeFromYesterday } = require('./utils/dates');
 const wb = new WB();
+const oneC = new OneC();
 const Excel = require('./services/excel');
 
 
-/* Result example:
-{
-  clusterNames: ["Mocква, Казань"],
-  fromDate: "2025-09-19T21:00:00.000Z",
-  toDate: "2025-10-17T20:59:59.999Z",
-  fulfillment: [{
-    article: "D81140-L",
-    name: "Полукомбинезон рабочий DOWELL White HD",
-    price_1c: 1234.56,
-    amount_1c: 100,
-    clusters: {
-      "Казань": {
-        fbo_total: 3, // 'Склад WB'
-        fbs_total: 1, // 'Склад продавца'
-        total: 4,
-        daily: 0.129,
-        stock: 4,
-        in_transit: 2,
-        supply_need: 5
-      }, 
-      "Москва": {}
-    }
-  }, 
-  {}]
-}
-*/
-
 /* Initialize fulfillment collection with product data
    Input: fulfillment array and products from extractProductsFromCards
-   Output: mutates fulfillment array to add products with empty cluster data
+   Output: mutates fulfillment array to add products with all clusters initialized to zero
 
    Example input products:
    [{ article: 'D81140-L', name: 'Полукомбинезон рабочий DOWELL White HD' }]
@@ -44,15 +19,37 @@ const Excel = require('./services/excel');
    [{
      article: 'D81140-L',
      name: 'Полукомбинезон рабочий DOWELL White HD',
-     clusters: {}
+     clusters: {
+       'Центральный': { fbo_total: 0, fbs_total: 0, total: 0, daily: 0, stock: 0, in_transit: 0, supply_need: 0 },
+       'Приволжский': { fbo_total: 0, fbs_total: 0, total: 0, daily: 0, stock: 0, in_transit: 0, supply_need: 0 },
+       // ... all other clusters
+     }
    }]
 */
 function addProducts(fulfillment, products) {
+  const { wbConfig } = require('./config');
+  const clusterNames = Object.keys(wbConfig.clusters);
+
   products.forEach(product => {
+    const clusters = {};
+
+    // Initialize all clusters with zero values
+    clusterNames.forEach(clusterName => {
+      clusters[clusterName] = {
+        fbo_total: 0,
+        fbs_total: 0,
+        total: 0,
+        daily: 0,
+        stock: 0,
+        in_transit: 0,
+        supply_need: 0
+      };
+    });
+
     fulfillment.push({
       article: product.article,
       name: product.name,
-      clusters: {}
+      clusters
     });
   });
 }
@@ -93,6 +90,9 @@ function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, d
     productMap.set(product.article, product);
   });
 
+  // Debug: Track unmapped warehouses
+  const unmappedWarehouses = new Set();
+
   // Aggregate orders
   ordersWithClusters.forEach(order => {
     // Skip cancelled orders
@@ -113,17 +113,13 @@ function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, d
       return;
     }
 
-    // Initialize cluster data if not exists
+    // Check if cluster exists in product
     if (!product.clusters[cluster]) {
-      product.clusters[cluster] = {
-        fbo_total: 0,  // 'Склад WB'
-        fbs_total: 0,  // 'Склад продавца'
-        total: 0,
-        daily: 0
-      };
+      unmappedWarehouses.add(order.warehouseName);
+      return;
     }
 
-    // Increment counters based on warehouse type
+    // Increment counters based on warehouse type (cluster already initialized)
     if (order.warehouseType === 'Склад WB') {
       product.clusters[cluster].fbo_total++;
     } else if (order.warehouseType === 'Склад продавца') {
@@ -138,8 +134,227 @@ function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, d
       cluster.daily = cluster.total / daysCovered;
     });
   });
+
+  // Debug output
+  if (unmappedWarehouses.size > 0) {
+    console.log(`\n=== Unmapped Warehouses in Orders (${unmappedWarehouses.size}) ===`);
+    console.log(`The following warehouses are not in wbConfig.clusters:`);
+    Array.from(unmappedWarehouses).sort().forEach(warehouse => console.log(`  - "${warehouse}"`));
+  }
 }
 
+/* Merge 1C stock data into fulfillment collection
+   Input: fulfillment array and 1C stock data
+   Output: mutates fulfillment array to add price_1c and amount_1c fields
+
+   Example input 1C stocks:
+   [{
+     Articul: 'D81250',
+     Name: 'Куртка рабочая',
+     Price: '1234,56',
+     Amount: 100
+   }]
+
+   Example output fulfillment:
+   [{
+     article: 'D81250-XL',
+     name: 'Куртка рабочая 3 в 1',
+     price_1c: 1234.56,
+     amount_1c: 100,
+     clusters: { ... }
+   }]
+*/
+function merge1CStock(fulfillment, oneCStocks) {
+  const stockByArticul = {};
+  oneCStocks.forEach(item => {
+    stockByArticul[item.Articul] = {
+      price: parseFloat(item.Price.replace(',', '.')),
+      amount: item.Amount
+    };
+  });
+
+  fulfillment.forEach(product => {
+    // Try to match by base article (without size suffix)
+    const baseArticle = product.article.split('-')[0];
+    const stock1C = stockByArticul[product.article] || stockByArticul[baseArticle];
+
+    if (stock1C) {
+      product.price_1c = stock1C.price;
+      product.amount_1c = stock1C.amount;
+    } else {
+      product.price_1c = null;
+      product.amount_1c = null;
+    }
+  });
+}
+
+/* Add stock and in-transit data to fulfillment collection
+   Input: fulfillment array (with products and orders) and stocks from getStocks()
+   Output: mutates fulfillment array to add stock and in_transit for each cluster
+
+   Example input stocks:
+   [{
+     "warehouseName": "Тула",
+     "supplierArticle": "D81250",
+     "techSize": "XL",
+     "quantity": 33,
+     "inWayToClient": 1,
+     "inWayFromClient": 0
+   }]
+
+   Example output fulfillment:
+   [{
+     article: 'D81250-XL',
+     name: 'Product name',
+     clusters: {
+       'Центральный': {
+         fbo_total: 1,
+         fbs_total: 0,
+         total: 1,
+         daily: 0.036,
+         stock: 33,           // quantity from warehouse
+         in_transit: 1        // inWayToClient + inWayFromClient
+       }
+     }
+   }]
+*/
+function calculateStocks(fulfillment, stocks) {
+  // Create warehouse to cluster map
+  const warehouseToCluster = wb.createWarehouseToClusterMap();
+
+  // Create a map for quick product lookup by article
+  const productMap = new Map();
+  fulfillment.forEach(product => {
+    productMap.set(product.article, product);
+  });
+
+  // Debug: Track matching stats
+  let matchedCount = 0;
+  let notFoundCount = 0;
+  const notFoundSamples = new Set();
+  const unmappedWarehouses = new Set();
+
+  // Aggregate stocks by product and cluster
+  stocks.forEach(stock => {
+    // Build article from supplierArticle and techSize
+    // Skip techSize if it's:
+    // - '0' (default/universal)
+    // - 'универсальный' (universal/one-size)
+    // - shoe size pattern like '40-41', '46-47', '44-45' (treated as single SKU)
+    const isShoeSize = stock.techSize && /^\d{2}-\d{2}$/.test(stock.techSize);
+    const shouldSkipSize = !stock.techSize ||
+      stock.techSize === '0' ||
+      stock.techSize === 'универсальный' ||
+      isShoeSize;
+
+    const article = shouldSkipSize
+      ? stock.supplierArticle
+      : `${stock.supplierArticle}-${stock.techSize}`;
+
+    const cluster = warehouseToCluster[stock.warehouseName] || 'Unknown';
+    const product = productMap.get(article);
+
+    if (!product) {
+      // Product not found in catalog - skip
+      notFoundCount++;
+      if (notFoundSamples.size < 10) {
+        notFoundSamples.add(article);
+      }
+      return;
+    }
+
+    matchedCount++;
+
+    // Skip if cluster is Unknown or not in our cluster list
+    if (!product.clusters[cluster]) {
+      unmappedWarehouses.add(stock.warehouseName);
+      return;
+    }
+
+    // Add stock quantity (cluster already initialized)
+    product.clusters[cluster].stock += stock.quantity || 0;
+
+    // Add in-transit (sum of inWayToClient and inWayFromClient)
+    product.clusters[cluster].in_transit += (stock.inWayToClient || 0) + (stock.inWayFromClient || 0);
+  });
+
+  // Debug output
+  console.log(`\n=== Stock Matching Stats ===`);
+  console.log(`Matched: ${matchedCount} stock records`);
+  console.log(`Not found: ${notFoundCount} stock records`);
+  if (notFoundSamples.size > 0) {
+    console.log(`\nSample articles not found in catalog:`);
+    Array.from(notFoundSamples).forEach(article => console.log(`  - ${article}`));
+  }
+
+  if (unmappedWarehouses.size > 0) {
+    console.log(`\n=== Unmapped Warehouses in stocks (${unmappedWarehouses.size}) ===`);
+    console.log(`The following warehouses are not in wbConfig.clusters:`);
+    Array.from(unmappedWarehouses).sort().forEach(warehouse => console.log(`  - "${warehouse}"`));
+  }
+
+  // Show sample articles from catalog for comparison
+  console.log(`\nSample articles from catalog (first 10):`);
+  Array.from(productMap.keys()).slice(0, 10).forEach(article => console.log(`  - ${article}`));
+}
+
+/* Calculate supply needs for each product-cluster combination
+   Input: fulfillment array with orders, stocks, and in-transit data
+   Output: mutates fulfillment array to add supply_need field
+
+   Formula:
+   - demandedStock = daily × stockCoverageDays - in_transit
+   - remainingStock = max(0, stock - fulfillmentLeadTimeDays × daily)
+   - supply_need = round(demandedStock - remainingStock)
+
+   Example:
+   - daily: 0.129 (average daily sales)
+   - stockCoverageDays: 28 (want 28 days of stock)
+   - fulfillmentLeadTimeDays: 14 (takes 14 days to fulfill)
+   - stock: 4 (current warehouse stock)
+   - in_transit: 2 (already on the way)
+
+   Result:
+   - demandedStock = 0.129 × 28 - 2 = 1.612
+   - remainingStock = max(0, 4 - 14 × 0.129) = 2.194
+   - supply_need = round(1.612 - 2.194) = -1 (negative means no supply needed)
+*/
+function calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays) {
+  fulfillment.forEach(product => {
+    Object.values(product.clusters).forEach(cluster => {
+      const demandedStock = cluster.daily * stockCoverageDays - cluster.in_transit;
+      const remainingStock = Math.max(0, cluster.stock - fulfillmentLeadTimeDays * cluster.daily);
+      cluster.supply_need = Math.round(demandedStock - remainingStock);
+    });
+  });
+}
+
+/* Result example:
+{
+  clusterNames: ["Mocква, Казань"],
+  fromDate: "2025-09-19T21:00:00.000Z",
+  toDate: "2025-10-17T20:59:59.999Z",
+  fulfillment: [{
+    article: "D81140-L",
+    name: "Полукомбинезон рабочий DOWELL White HD",
+    price_1c: 1234.56,
+    amount_1c: 100,
+    clusters: {
+      "Казань": {
+        fbo_total: 3, // 'Склад WB'
+        fbs_total: 1, // 'Склад продавца'
+        total: 4,
+        daily: 0.129,
+        stock: 4,
+        in_transit: 2,
+        supply_need: 5
+      }, 
+      "Москва": {}
+    }
+  }, 
+  {}]
+}
+*/
 async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
   const { fromDate, toDate } = getDateRangeFromYesterday(daysCovered);
 
@@ -155,43 +370,21 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
   const ordersWithClusters = wb.enrichOrdersWithClusters(orders);
   aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, daysCovered);
 
-  // Excel.exportToExcel(orders);
+  const stocks = await wb.getStocks(true);
+  calculateStocks(fulfillment, stocks);
 
-  return;
-  // Calculate order counts by cluster
-  const orderCountsByCluster = {};
-  const wts = {};
-  enrichedOrders.forEach(order => {
-    const cluster = order.cluster || 'Unknown';
-    orderCountsByCluster[cluster] = (orderCountsByCluster[cluster] || 0) + 1;
-    const wt = order.warehouseType;
-    wts[wt] = (wts[wt] ?? 0) + 1;
-  });
-  console.log(wts);
+  calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays);
 
-  console.log('\n=== Order counts by cluster ===');
-  Object.entries(orderCountsByCluster)
-    .sort(([, a], [, b]) => b - a) // Sort by count descending
-    .forEach(([cluster, count]) => {
-      console.log(`${cluster}: ${count}`);
-    });
+  // 1C STOCK
+  const oneCStocks = await oneC.getStock();
+  console.log(`Found ${oneCStocks.length} products in 1C stock`);
+  merge1CStock(fulfillment, oneCStocks);
 
-  // Find warehouses with unknown cluster
-  const unknownWarehouses = new Set();
-  enrichedOrders.forEach(order => {
-    if (order.cluster === 'Unknown') {
-      unknownWarehouses.add(order.warehouseName);
-    }
-  });
+  console.log('\n=== Sample fulfillment data ===');
+  // console.log(JSON.stringify(fulfillment[10], null, 2));
+  // console.log(JSON.stringify(fulfillment[20], null, 2));
 
-  if (unknownWarehouses.size > 0) {
-    console.log('\n=== Warehouses with unknown cluster ===');
-    Array.from(unknownWarehouses).sort().forEach(warehouse => {
-      console.log(`- ${warehouse}`);
-    });
-  } else {
-    console.log('\n✓ All warehouses are mapped to clusters');
-  }
+  return fulfillment;
 }
 
 async function main() {

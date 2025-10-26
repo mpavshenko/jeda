@@ -388,6 +388,83 @@ class WB {
       cluster: warehouseToCluster[order.warehouseName] || 'Unknown'
     }));
   }
+
+  /* Get current stocks using Statistics API
+     Returns real-time stock data updated every 30 minutes
+     Includes warehouse location, quantities, and in-transit information
+
+     @param {boolean} debug - If true, fetches only first batch without pagination/rate limiting
+
+     Result example:
+     [{
+       "lastChangeDate": "2023-07-05T11:13:35",
+       "warehouseName": "Краснодар",
+       "supplierArticle": "D81250",
+       "nmId": 1439871458,
+       "barcode": "2037401340280",
+       "quantity": 33,
+       "inWayToClient": 1,
+       "inWayFromClient": 0,
+       "quantityFull": 34,
+       "category": "Посуда и инвентарь",
+       "subject": "Формы для запекания",
+       "brand": "X",
+       "techSize": "XL",
+       "Price": 185,
+       "Discount": 0,
+       "isSupply": true,
+       "isRealization": false,
+       "SCCode": "Tech"
+     }]
+  */
+  async getStocks(debug = false) {
+    const allStocks = [];
+    let dateFrom = '2019-06-20';  // Earliest possible date to get all stocks
+    let hasMore = true;
+
+    while (hasMore) {
+      console.log(`Fetching stocks from dateFrom: ${dateFrom}`);
+
+      try {
+        const response = await this.statisticsClient.get('/api/v1/supplier/stocks', {
+          params: { dateFrom }
+        });
+
+        const stocks = response.data || [];
+
+        if (stocks.length > 0) {
+          allStocks.push(...stocks);
+          console.log(`Fetched ${stocks.length} stock records. Total so far: ${allStocks.length}`);
+
+          // In debug mode, stop after first request
+          if (debug) {
+            console.log('Debug mode: stopping after first request');
+            hasMore = false;
+            break;
+          }
+
+          // Use lastChangeDate of the last item for next request
+          const lastStock = stocks[stocks.length - 1];
+          dateFrom = lastStock.lastChangeDate;
+        } else {
+          // Empty array means all stocks have been retrieved
+          hasMore = false;
+        }
+
+        // Rate limiting: 1 request per minute (skip in debug mode)
+        if (hasMore && !debug) {
+          console.log('Waiting 60 seconds due to rate limit...');
+          await new Promise(resolve => setTimeout(resolve, 60000));
+        }
+      } catch (error) {
+        console.error(`Error fetching stocks from ${dateFrom}:`, error.response?.data || error.message);
+        throw error;
+      }
+    }
+
+    console.log(`Successfully fetched ${allStocks.length} stock records${debug ? ' (debug mode)' : ''}`);
+    return allStocks;
+  }
 }
 
 module.exports = WB;
