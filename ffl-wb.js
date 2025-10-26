@@ -18,8 +18,8 @@ const Excel = require('./services/excel');
     amount_1c: 100,
     clusters: {
       "Казань": {
-        fbo_total: 3,
-        fbs_total: 1,
+        fbo_total: 3, // 'Склад WB'
+        fbs_total: 1, // 'Склад продавца'
         total: 4,
         daily: 0.129,
         stock: 4,
@@ -33,6 +33,113 @@ const Excel = require('./services/excel');
 }
 */
 
+/* Initialize fulfillment collection with product data
+   Input: fulfillment array and products from extractProductsFromCards
+   Output: mutates fulfillment array to add products with empty cluster data
+
+   Example input products:
+   [{ article: 'D81140-L', name: 'Полукомбинезон рабочий DOWELL White HD' }]
+
+   Example output fulfillment:
+   [{
+     article: 'D81140-L',
+     name: 'Полукомбинезон рабочий DOWELL White HD',
+     clusters: {}
+   }]
+*/
+function addProducts(fulfillment, products) {
+  products.forEach(product => {
+    fulfillment.push({
+      article: product.article,
+      name: product.name,
+      clusters: {}
+    });
+  });
+}
+
+/* Aggregate orders by products and clusters
+   Input: fulfillment array (initialized with products) and orders with cluster data
+   Output: mutates fulfillment array to add order totals for each cluster
+
+   Example input orders:
+   [{
+     date: '2025-09-23T22:07:10',
+     warehouseName: 'Тула',
+     warehouseType: 'Склад WB',
+     supplierArticle: 'D81250',
+     techSize: 'XL',
+     isCancel: false,
+     cluster: 'Центральный'
+   }]
+
+   Example output fulfillment:
+   [{
+     article: 'D81250-XL',
+     name: 'Product name',
+     clusters: {
+       'Центральный': {
+         fbo_total: 1,  // 'Склад WB'
+         fbs_total: 0,  // 'Склад продавца'
+         total: 1,
+         daily: 0.036
+       }
+     }
+   }]
+*/
+function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, daysCovered) {
+  // Create a map for quick product lookup by article
+  const productMap = new Map();
+  fulfillment.forEach(product => {
+    productMap.set(product.article, product);
+  });
+
+  // Aggregate orders
+  ordersWithClusters.forEach(order => {
+    // Skip cancelled orders
+    if (order.isCancel) {
+      return;
+    }
+
+    // Build article from supplierArticle and techSize
+    const article = order.techSize
+      ? `${order.supplierArticle}-${order.techSize}`
+      : order.supplierArticle;
+
+    const cluster = order.cluster || 'Unknown';
+    const product = productMap.get(article);
+
+    if (!product) {
+      // Product not found in catalog - skip or warn
+      return;
+    }
+
+    // Initialize cluster data if not exists
+    if (!product.clusters[cluster]) {
+      product.clusters[cluster] = {
+        fbo_total: 0,  // 'Склад WB'
+        fbs_total: 0,  // 'Склад продавца'
+        total: 0,
+        daily: 0
+      };
+    }
+
+    // Increment counters based on warehouse type
+    if (order.warehouseType === 'Склад WB') {
+      product.clusters[cluster].fbo_total++;
+    } else if (order.warehouseType === 'Склад продавца') {
+      product.clusters[cluster].fbs_total++;
+    }
+  });
+
+  // Calculate totals and daily averages
+  fulfillment.forEach(product => {
+    Object.values(product.clusters).forEach(cluster => {
+      cluster.total = cluster.fbo_total + cluster.fbs_total;
+      cluster.daily = cluster.total / daysCovered;
+    });
+  });
+}
+
 async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
   const { fromDate, toDate } = getDateRangeFromYesterday(daysCovered);
 
@@ -42,17 +149,25 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
 
   const cards = await wb.getAllCards();
   const products = wb.extractProductsFromCards(cards);
-  // addProducts(fulfillment, products);
+  addProducts(fulfillment, products);
 
   const orders = await wb.getAllOrders(fromDate, toDate);
-  const enrichedOrders = wb.enrichOrdersWithClusters(orders);
+  const ordersWithClusters = wb.enrichOrdersWithClusters(orders);
+  aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, daysCovered);
 
+  // Excel.exportToExcel(orders);
+
+  return;
   // Calculate order counts by cluster
   const orderCountsByCluster = {};
+  const wts = {};
   enrichedOrders.forEach(order => {
     const cluster = order.cluster || 'Unknown';
     orderCountsByCluster[cluster] = (orderCountsByCluster[cluster] || 0) + 1;
+    const wt = order.warehouseType;
+    wts[wt] = (wts[wt] ?? 0) + 1;
   });
+  console.log(wts);
 
   console.log('\n=== Order counts by cluster ===');
   Object.entries(orderCountsByCluster)

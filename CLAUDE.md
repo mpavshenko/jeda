@@ -4,17 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Node.js application for Ozon marketplace seller operations. The project is structured as a simple CLI tool that interacts with the Ozon API.
+This is a Node.js application for marketplace seller operations. The project provides fulfillment analytics and reporting for both Ozon and Wildberries marketplaces.
 
 ## Architecture
 
-- **index.js**: Main entry point (currently minimal with "hello jeda")
-- **config.js**: Ozon API configuration including:
-  - API endpoints and authentication
-  - Rate limiting settings (200ms delay, 3 max retries)
+### Core Files
+- **index.js**: Main entry point that loads server.js
+- **server.js**: Server application (PM2 managed)
+- **ffl.js**: Ozon fulfillment calculation and reporting
+- **ffl-wb.js**: Wildberries fulfillment calculation (in progress)
+- **config.js**: Configuration for both marketplaces:
+  - Ozon API endpoints and authentication
+  - Ozon rate limiting settings (500ms delay, 3 max retries)
   - Business logic constants (FBO stock supply days, safety stock days)
-  - Regional delivery day mappings for different clusters
-- **.env**: Contains Ozon API credentials (CLIENT_ID, API_KEY, BASE_URL)
+  - Regional delivery day mappings for Ozon clusters
+  - Wildberries cluster-to-warehouse mappings
+
+### Services
+- **services/ozon.js**: Ozon API client and data processing
+- **services/wb.js**: Wildberries API client and data processing
+- **services/excel.js**: Excel report generation
+- **services/1c.js**: 1C integration for stock data
+
+### Environment Variables
+- **Ozon**: `OZON_CLIENT_ID`, `OZON_API_KEY`, `OZON_BASE_URL`
+- **Wildberries**: `WB_API_TOKEN`
+- **1C**: 1C credentials for stock integration
 
 ## Development Commands
 
@@ -30,23 +45,113 @@ npm run dev        # Run with --watch flag for development
 - **inquirer**: Interactive CLI prompts
 - **nodemon**: Development dependency for auto-reloading
 
-## Configuration
+## API Documentation
 
-The application uses ozon API: https://docs.ozon.ru/api/seller/
+- **Ozon API**: https://docs.ozon.ru/api/seller/
+- **Wildberries API**: https://openapi.wildberries.ru/
 
-The application uses environment variables for Ozon API configuration:
-- `OZON_CLIENT_ID`: Ozon seller client ID
-- `OZON_API_KEY`: Ozon API key
-- `OZON_BASE_URL`: API base URL (defaults to https://api-seller.ozon.ru)
+## Business Logic
 
-Rate limiting is configured for 200ms delays between requests with up to 3 retries.
+### Fulfillment Calculation Flow
 
-## Business Logic Constants
+Both Ozon and Wildberries follow a similar fulfillment data structure:
 
-- FBO stock supply period: 28 days
-- FBO safety stock period: 5 days
-- Default sales analysis period: 30 days
-- Regional delivery days vary by cluster (7-30 days depending on location)
+```javascript
+{
+  article: "D81140-L",           // Product SKU/article
+  name: "Product name",
+  price_1c: 1234.56,             // Price from 1C (optional)
+  amount_1c: 100,                // Available stock in 1C (optional)
+  clusters: {
+    "Cluster Name": {
+      fbo_total: 3,               // Orders from marketplace warehouse
+      fbs_total: 1,               // Orders from seller warehouse
+      total: 4,                   // Total orders
+      daily: 0.129,               // Daily average (total/daysCovered)
+      stock: 4,                   // Current stock at cluster
+      in_transit: 2,              // Units in transit to cluster
+      supply_need: 5              // Calculated supply requirement
+    }
+  }
+}
+```
+
+### Warehouse Type Mappings
+
+**Ozon:**
+- FBO (Fulfillment by Ozon) = Orders from Ozon warehouse
+- FBS (Fulfillment by Seller) = Orders from seller warehouse
+
+**Wildberries:**
+- "Склад WB" = Orders from WB warehouse (equivalent to FBO)
+- "Склад продавца" = Orders from seller warehouse (equivalent to FBS)
+
+### Calculation Constants
+
+- Default analysis period: 28 days
+- Stock coverage period: 28 days
+- Fulfillment lead time: 14 days
+- Supply need formula: `(daily × stockCoverageDays - in_transit) - (stock - fulfillmentLeadTimeDays × daily)`
+
+## Data Processing Pipeline
+
+### Ozon (ffl.js)
+1. Fetch FBO and FBS orders for date range
+2. Fetch warehouse/cluster mappings
+3. Fetch current stock levels by warehouse
+4. Fetch in-transit supply orders
+5. Aggregate all data by product and cluster
+6. Enrich with 1C stock data
+7. Calculate supply needs
+8. Generate Excel reports
+
+### Wildberries (ffl-wb.js)
+1. Fetch all product cards from catalog
+2. Extract products with article codes (vendorCode-techSize)
+3. Initialize fulfillment collection with products
+4. Fetch orders from statistics API
+5. Enrich orders with cluster mappings
+6. Aggregate orders by product and cluster
+7. TODO: Add stock data
+8. TODO: Add in-transit data
+9. TODO: Calculate supply needs
+10. TODO: Generate Excel reports
+
+## Key Implementation Details
+
+### Article Code Construction
+
+**Ozon:**
+- Uses `offer_id` directly from product data
+- Example: "D81140-L"
+
+**Wildberries:**
+- Single-size products: Uses `vendorCode` only
+- Multi-size products: Combines `vendorCode-techSize`
+- Example: "D81250-XL"
+
+### Cluster/Warehouse Organization
+
+**Ozon:**
+- Hierarchical: Clusters contain multiple warehouses
+- Mapping done via API: `/v1/cluster/list`
+- Warehouses identified by both ID and name
+
+**Wildberries:**
+- Static mapping in config.js
+- 8 main clusters: Центральный, Приволжский, Северо-Западный, Южный + Северо-Кавказский, Уральский, Беларусь, Грузия, Армения, Узбекистан
+- Each cluster contains multiple warehouse names
+
+### Rate Limiting
+
+**Ozon:**
+- Delay: 500ms between requests
+- Max retries: 3
+- Applied via axios interceptor
+
+**Wildberries:**
+- Statistics API: 60 seconds between requests (strict)
+- Other endpoints: No enforced delay
 
 ## Code Formatting
 

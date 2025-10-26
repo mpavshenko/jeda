@@ -250,7 +250,6 @@ class WB {
      Result example:
      [{
         date: '2025-09-23T22:07:10',
-        lastChangeDate: '2025-09-24T00:14:58',
         warehouseName: 'Тула',
         warehouseType: 'Склад WB',
         supplierArticle: 'D81250',
@@ -291,7 +290,7 @@ class WB {
         // Transform to only include used fields
         const transformedOrders = filteredOrders.map(order => ({
           date: order.date,
-          lastChangeDate: order.lastChangeDate,
+          // lastChangeDate: order.lastChangeDate,
           warehouseName: order.warehouseName,
           warehouseType: order.warehouseType,
           supplierArticle: order.supplierArticle,
