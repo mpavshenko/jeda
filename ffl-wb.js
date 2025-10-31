@@ -2,10 +2,13 @@ require('dotenv').config();
 
 const WB = require('./services/wb');
 const OneC = require('./services/1c');
-const { getDateRangeFromYesterday } = require('./utils/dates');
+const { getDateRangeFromYesterday, formatDate } = require('./utils/dates');
+const { wbConfig } = require('./config');
 const wb = new WB();
 const oneC = new OneC();
 const Excel = require('./services/excel');
+
+const CLUSTER_NAMES = Object.keys(wbConfig.clusters);
 
 
 /* Initialize fulfillment collection with product data
@@ -279,9 +282,9 @@ function calculateStocks(fulfillment, stocks) {
   });
 
   // Debug output
-  console.log(`\n=== Stock Matching Stats ===`);
-  console.log(`Matched: ${matchedCount} stock records`);
-  console.log(`Not found: ${notFoundCount} stock records`);
+  // console.log(`\n=== Stock Matching Stats ===`);
+  // console.log(`Matched: ${matchedCount} stock records`);
+  // console.log(`Not found: ${notFoundCount} stock records`);
   if (notFoundSamples.size > 0) {
     console.log(`\nSample articles not found in catalog:`);
     Array.from(notFoundSamples).forEach(article => console.log(`  - ${article}`));
@@ -292,10 +295,6 @@ function calculateStocks(fulfillment, stocks) {
     console.log(`The following warehouses are not in wbConfig.clusters:`);
     Array.from(unmappedWarehouses).sort().forEach(warehouse => console.log(`  - "${warehouse}"`));
   }
-
-  // Show sample articles from catalog for comparison
-  console.log(`\nSample articles from catalog (first 10):`);
-  Array.from(productMap.keys()).slice(0, 10).forEach(article => console.log(`  - ${article}`));
 }
 
 /* Calculate supply needs for each product-cluster combination
@@ -380,112 +379,56 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
   console.log(`Found ${oneCStocks.length} products in 1C stock`);
   merge1CStock(fulfillment, oneCStocks);
 
-  console.log('\n=== Sample fulfillment data ===');
-  // console.log(JSON.stringify(fulfillment[10], null, 2));
-  // console.log(JSON.stringify(fulfillment[20], null, 2));
+  return {
+    fulfillment,
+    fromDate,
+    toDate
+  };
+}
 
-  return fulfillment;
+async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfillmentLeadTimeDays = 14) {
+  const fs = require('fs').promises;
+  const path = require('path');
+
+  const {
+    fulfillment,
+    fromDate,
+    toDate
+  } = await calculateFulfillment(daysCovered, stockCoverageDays, fulfillmentLeadTimeDays);
+
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
+  const folderName = `WB_${dateRange}_${hours}-${minutes}`;
+
+  const reportsBaseDir = path.join(process.cwd(), 'reports');
+  const outputDir = path.join(reportsBaseDir, folderName);
+
+  // Create reports base directory and date-specific directory
+  await fs.mkdir(outputDir, { recursive: true });
+  console.log(`Created directory: reports/${folderName}/`);
+
+  console.log('\nGenerating main WB supply report...');
+  const mainBuffer = await Excel.createWbFulfillmentReportBuffer(fulfillment);
+
+  const fname = path.join(outputDir, `wb_fulfillment_${dateRange}.xlsx`);
+  await fs.writeFile(fname, mainBuffer);
+  console.log(`Saved: ${fname}`);
+
+  console.log('\nGenerating WB cluster supply reports...');
+  for (const clusterName of CLUSTER_NAMES) {
+    const clusterBuffer = await Excel.createWbClusterFulfillmentReportBuffer(clusterName, fulfillment);
+    if (clusterBuffer) {
+      const fname = path.join(outputDir, `wb_fulfillment_${clusterName}_${dateRange}.xlsx`);
+      await fs.writeFile(fname, clusterBuffer);
+      console.log(`Saved: ${fname}`);
+    }
+  }
 }
 
 async function main() {
-  await calculateFulfillment();
-
-  // console.log("=== WB Token Information ===");
-  // try {
-  //   const tokenInfo = wb.getTokenInfo();
-  //   console.log("Token expires at:", tokenInfo.expiresAt);
-  //   console.log("User ID:", tokenInfo.userId);
-  //   console.log("Seller ID:", tokenInfo.sellerId);
-  //   console.log("\nToken Scopes:");
-  //   tokenInfo.scopes.forEach(scope => console.log(`  - ${scope}`));
-  //   console.log("\nFull payload:", JSON.stringify(tokenInfo.payload, null, 2));
-  // } catch (error) {
-  //   console.error("Failed to decode token:", error.message);
-  // }
-
-  // console.log("\n=== Testing WB API connection ===");
-
-  // try {
-  //   const result = await wb.ping();
-  //   console.log("Ping successful:", result);
-  // } catch (error) {
-  //   console.error("Ping failed:", error.message);
-  // }
-
-  // console.log("\n=== Fetching all products ===");
-
-  // try {
-  //   const cards = await wb.getAllCards({ limit: 10 });
-  //   console.log("Products fetched successfully:");
-  //   console.log(cards[0]);
-  //   const products = wb.extractProductsFromCards(cards);
-  //   console.log(products[0]);
-  //   console.table(products);
-  //   Excel.exportToExcel(products);
-
-  // } catch (error) {
-  //   console.error("Failed to fetch products:", error.message);
-  // }
-
-  // return;
-
-  // console.log("\n=== Testing FBS Orders ===");
-
-
-  // try {
-  //   const { fromDate, toDate } = getDateRangeFromYesterday(7);
-  //   console.log(`Fetching all orders from ${fromDate.toISOString()} to ${toDate.toISOString()}`);
-
-  //   const allOrders = await wb.getAllOrders(fromDate, toDate);
-  //   console.log(`\nFetched ${allOrders.length} total orders`);
-
-  //   if (allOrders.length > 0) {
-  //     console.log("\nFirst order sample:");
-  //     console.log(allOrders[0]);
-  //     console.log(allOrders[1]);
-  //     console.log(allOrders[2]);
-
-  //     // Group by warehouse name and type
-  //     const byWarehouse = {};
-  //     const byType = {};
-
-  //     allOrders.forEach(order => {
-  //       const warehouseName = order.warehouseName || 'Unknown';
-  //       const warehouseType = order.warehouseType || 'Unknown';
-
-  //       // Track warehouse stats
-  //       if (!byWarehouse[warehouseName]) {
-  //         byWarehouse[warehouseName] = {};
-  //       }
-  //       if (!byWarehouse[warehouseName][warehouseType]) {
-  //         byWarehouse[warehouseName][warehouseType] = 0;
-  //       }
-  //       byWarehouse[warehouseName][warehouseType]++;
-
-  //       // Track type totals
-  //       if (!byType[warehouseType]) {
-  //         byType[warehouseType] = 0;
-  //       }
-  //       byType[warehouseType]++;
-  //     });
-
-  //     console.log("\nOrders by warehouse and type:");
-  //     Object.entries(byWarehouse).forEach(([warehouse, types]) => {
-  //       const total = Object.values(types).reduce((sum, count) => sum + count, 0);
-  //       console.log(`  ${warehouse} (Total: ${total}):`);
-  //       Object.entries(types).forEach(([type, count]) => {
-  //         console.log(`    ${type}: ${count}`);
-  //       });
-  //     });
-
-  //     console.log("\nTotal by warehouse type:");
-  //     Object.entries(byType).forEach(([type, count]) => {
-  //       console.log(`  ${type}: ${count}`);
-  //     });
-  //   }
-  // } catch (error) {
-  //   console.error("Failed to fetch orders from statistics API:", error.message);
-  // }
+  await fulfillmentReport();
 }
 
 main().catch(error => {
