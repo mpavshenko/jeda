@@ -8,7 +8,7 @@ class WB {
       baseURL: 'https://common-api.wildberries.ru',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.WB_API_TOKEN}`
+        'Authorization': `Bearer ${wbConfig.apiToken}`
       }
     });
 
@@ -16,7 +16,7 @@ class WB {
       baseURL: 'https://content-api.wildberries.ru',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.WB_API_TOKEN}`
+        'Authorization': `Bearer ${wbConfig.apiToken}`
       }
     });
 
@@ -24,7 +24,7 @@ class WB {
       baseURL: 'https://suppliers-api.wildberries.ru',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.WB_API_TOKEN}`
+        'Authorization': `Bearer ${wbConfig.apiToken}`
       }
     });
 
@@ -32,7 +32,7 @@ class WB {
       baseURL: 'https://statistics-api.wildberries.ru',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': process.env.WB_API_TOKEN
+        'Authorization': wbConfig.apiToken
       }
     });
   }
@@ -189,9 +189,9 @@ class WB {
 
   getTokenInfo() {
     try {
-      const token = process.env.WB_API_TOKEN;
+      const token = wbConfig.apiToken;
       if (!token) {
-        throw new Error('WB_API_TOKEN not found in environment variables');
+        throw new Error('WB_API_TOKEN not found in configuration');
       }
 
       // Decode JWT token (header.payload.signature)

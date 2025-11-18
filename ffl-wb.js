@@ -402,12 +402,12 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
   const folderName = `WB_${dateRange}_${hours}-${minutes}`;
 
-  const reportsBaseDir = path.join(process.cwd(), 'reports');
+  const reportsBaseDir = path.join(process.cwd(), 'reports', 'wb');
   const outputDir = path.join(reportsBaseDir, folderName);
 
   // Create reports base directory and date-specific directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/${folderName}/`);
+  console.log(`Created directory: reports/wb/${folderName}/`);
 
   console.log('\nGenerating main WB supply report...');
   const mainBuffer = await Excel.createWbFulfillmentReportBuffer(fulfillment);

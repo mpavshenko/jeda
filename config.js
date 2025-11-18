@@ -40,6 +40,11 @@ const ozonConfig = {
 };
 
 const wbConfig = {
+  apiToken: process.env.WB_API_TOKEN,
+
+  // Cron schedule for report generation
+  cronSchedule: '45 5 * * *',  // Daily at 05:45
+
   clusters: {
     "Центральный": [
       "Пушкино",

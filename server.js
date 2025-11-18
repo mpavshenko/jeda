@@ -6,8 +6,9 @@ const cronstrue = require('cronstrue');
 const path = require('path');
 const serveIndex = require('serve-index');
 const basicAuth = require('express-basic-auth');
-const { ozonConfig } = require('./config');
+const { ozonConfig, wbConfig } = require('./config');
 const { fulfillmentReport } = require('./ffl');
+const { fulfillmentReport: wbFulfillmentReport } = require('./ffl-wb');
 const { version } = require('./package.json');
 
 const app = express();
@@ -22,14 +23,25 @@ const auth = basicAuth({
   realm: 'Jeda Seller Reports'
 });
 
-// Schedule report generation
+// Schedule Ozon report generation
 cron.schedule(ozonConfig.cronSchedule, async () => {
-  console.log(`Running scheduled fulfillment report...`);
+  console.log(`Running scheduled Ozon fulfillment report...`);
   try {
     await fulfillmentReport();
-    console.log(`Report generation completed successfully`);
+    console.log(`Ozon report generation completed successfully`);
   } catch (error) {
-    console.error(`Report generation failed:`, error);
+    console.error(`Ozon report generation failed:`, error);
+  }
+});
+
+// Schedule WB report generation
+cron.schedule(wbConfig.cronSchedule, async () => {
+  console.log(`Running scheduled WB fulfillment report...`);
+  try {
+    await wbFulfillmentReport();
+    console.log(`WB report generation completed successfully`);
+  } catch (error) {
+    console.error(`WB report generation failed:`, error);
   }
 });
 
@@ -73,6 +85,8 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  const cronDescription = cronstrue.toString(ozonConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
-  console.log(`Scheduled report generation: "${ozonConfig.cronSchedule}" => ${cronDescription}`);
+  const ozonCronDescription = cronstrue.toString(ozonConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
+  console.log(`Scheduled Ozon report: "${ozonConfig.cronSchedule}" => ${ozonCronDescription}`);
+  const wbCronDescription = cronstrue.toString(wbConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
+  console.log(`Scheduled WB report: "${wbConfig.cronSchedule}" => ${wbCronDescription}`);
 });
