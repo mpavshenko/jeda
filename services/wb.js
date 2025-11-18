@@ -3,6 +3,26 @@ const { formatRFC3339 } = require('../utils/dates');
 const { wbConfig } = require('../config');
 
 class WB {
+  // Format axios error and throw clean error
+  static handleError(error, context = 'WB API Error') {
+    let errorMsg;
+
+    if (error.response) {
+      // HTTP error response
+      const details = error.response.data?.message || error.response.data?.error || error.response.statusText;
+      errorMsg = `${context}: ${error.config?.method?.toUpperCase()} ${error.config?.url} - ${error.response.status} ${details}`;
+    } else if (error.request) {
+      // Request made but no response
+      errorMsg = `${context}: ${error.config?.method?.toUpperCase()} ${error.config?.url} - No response received`;
+    } else {
+      // Error in request setup
+      errorMsg = `${context}: ${error.message}`;
+    }
+
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
   constructor() {
     this.client = axios.create({
       baseURL: 'https://common-api.wildberries.ru',
@@ -42,8 +62,7 @@ class WB {
       const response = await this.client.get('/ping');
       return response.data;
     } catch (error) {
-      console.error('WB API Error:', error.response?.data || error.message);
-      throw error;
+      WB.handleError(error, 'WB API Ping Error');
     }
   }
 
@@ -160,8 +179,7 @@ class WB {
           hasMore = false;
         }
       } catch (error) {
-        console.error('WB API Error:', error.response?.data || error.message);
-        throw error;
+        WB.handleError(error, 'WB API Error');
       }
     }
 
@@ -335,8 +353,7 @@ class WB {
         }
 
       } catch (error) {
-        console.error(`Error fetching orders from statistics API:`, error.response?.data || error.message);
-        throw error;
+        WB.handleError(error, 'Error fetching orders from statistics API');
       }
     }
 
@@ -457,8 +474,7 @@ class WB {
           await new Promise(resolve => setTimeout(resolve, 60000));
         }
       } catch (error) {
-        console.error(`Error fetching stocks from ${dateFrom}:`, error.response?.data || error.message);
-        throw error;
+        WB.handleError(error, `Error fetching stocks from ${dateFrom}`);
       }
     }
 

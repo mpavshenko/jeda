@@ -30,7 +30,7 @@ cron.schedule(ozonConfig.cronSchedule, async () => {
     await fulfillmentReport();
     console.log(`Ozon report generation completed successfully`);
   } catch (error) {
-    console.error(`Ozon report generation failed:`, error);
+    console.error(`Ozon report generation failed:`, error.message || error);
   }
 });
 
@@ -41,7 +41,7 @@ cron.schedule(wbConfig.cronSchedule, async () => {
     await wbFulfillmentReport();
     console.log(`WB report generation completed successfully`);
   } catch (error) {
-    console.error(`WB report generation failed:`, error);
+    console.error(`WB report generation failed:`, error.message || error);
   }
 });
 

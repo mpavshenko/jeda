@@ -432,6 +432,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error('Unhandled error:', error);
+  console.error('Unhandled error:', error.message || error);
   process.exit(1);
 });
