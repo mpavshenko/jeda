@@ -431,7 +431,10 @@ async function main() {
   await fulfillmentReport();
 }
 
-main().catch(error => {
-  console.error('Unhandled error:', error.message || error);
-  process.exit(1);
-});
+// Only run if executed directly, not when imported as module
+if (require.main === module) {
+  main().catch(error => {
+    console.error('Unhandled error:', error.message || error);
+    process.exit(1);
+  });
+}

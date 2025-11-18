@@ -171,7 +171,7 @@ async function main() {
 // Only run main if this file is executed directly
 if (require.main === module) {
   main().catch(error => {
-    console.error('Unhandled error:', error);
+    console.error('Unhandled error:', error.message || error);
     process.exit(1);
   });
 }
