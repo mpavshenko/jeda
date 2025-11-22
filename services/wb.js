@@ -55,6 +55,14 @@ class WB {
         'Authorization': wbConfig.apiToken
       }
     });
+
+    this.suppliesClient = axios.create({
+      baseURL: 'https://supplies-api.wildberries.ru',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': wbConfig.apiToken
+      }
+    });
   }
 
   async ping() {
@@ -482,6 +490,93 @@ class WB {
 
     console.log(`Successfully fetched ${allStocks.length} stock records${debug ? ' (debug mode)' : ''}`);
     return allStocks;
+  }
+
+  /*
+  Get in-transit supplies (status 2, 3, 4 = planned, unloading allowed, accepting)
+  Returns array of products in transit with warehouse and quantity information
+
+  Result example:
+  [{
+    supplierArticle: 'D81250',
+    techSize: 'XL',
+    warehouseName: 'Коледино',
+    quantity: 10
+  }]
+  */
+  async getInTransitSupplies(daysBack = 30) {
+    try {
+      const allGoods = [];
+
+      // Calculate date range (last N days)
+      const toDate = new Date();
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - daysBack);
+
+      // Format dates as YYYY-MM-DD
+      const formatDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // Get supplies with status 2, 3, 4, 5, 6 (in transit and recently delivered)
+      // Status: 2=Planned, 3=Unloading allowed, 4=Accepting, 5=Accepted, 6=Unloaded
+      const response = await this.suppliesClient.post('/api/v1/supplies', {
+        statusIDs: [2, 3, 4, 5, 6],
+        from: formatDate(fromDate),
+        till: formatDate(toDate),
+        type: 'createDate'  // Filter by supply creation date
+      });
+
+      const supplies = Array.isArray(response.data) ? response.data : [];
+      console.log(`Found ${supplies.length} supplies (last ${daysBack} days, statuses 2-6)`);
+
+      // For each supply, get details and goods
+      for (let i = 0; i < supplies.length; i++) {
+        const supply = supplies[i];
+        try {
+          console.log(`Processing supply ${i + 1}/${supplies.length} (ID: ${supply.supplyID})...`);
+
+          // Get supply details to get warehouse name
+          const detailsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}`);
+          const warehouseName = detailsResponse.data.warehouseName;
+
+          // Get goods in this supply
+          const goodsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}/goods`, {
+            params: { isPreorderID: false }
+          });
+
+          const goods = Array.isArray(goodsResponse.data) ? goodsResponse.data : [];
+          console.log(`  └─ ${warehouseName}: ${goods.length} products`);
+
+          // Add warehouse info to each good
+          goods.forEach(good => {
+            allGoods.push({
+              supplierArticle: good.vendorCode,
+              techSize: good.techSize || '',
+              warehouseName: warehouseName,
+              quantity: good.quantity || 0
+            });
+          });
+
+          // Rate limiting: Supplies API is very strict, use 5 second delay (~12 supplies/min)
+          // Each supply requires 2 API calls (details + goods), so 24 req/min total
+          await new Promise(resolve => setTimeout(resolve, 5000));
+
+        } catch (error) {
+          console.error(`  └─ Error: ${error.message}`);
+          // Continue with next supply
+        }
+      }
+
+      console.log(`Successfully fetched ${allGoods.length} products in transit`);
+      return allGoods;
+
+    } catch (error) {
+      WB.handleError(error, 'Error fetching in-transit supplies');
+    }
   }
 }
 

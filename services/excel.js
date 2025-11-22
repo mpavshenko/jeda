@@ -370,7 +370,7 @@ class Excel {
     };
 
     // Merge cells for cluster headers (level 1) with alternating colors
-    let colIndex = 6; // Start after 'Артикул', 'Штрихкод', 'Название', 'Цена', 'Остаток'
+    let colIndex = 6; // Start after 'Артикул', 'Штрихкод', 'Название', 'Цена', 'Остаток' (columns 1-5)
     clusterNames.forEach((cluster, clusterIndex) => {
       worksheet.mergeCells(1, colIndex, 1, colIndex + 5); // Merge 6 columns
       const cell = worksheet.getCell(1, colIndex);
@@ -477,9 +477,9 @@ class Excel {
       // Check if amount_1c < total supply, highlight row with red
       const shouldHighlight = product.amount_1c != null && product.amount_1c < totalSupply;
 
-      // Style 1C columns
-      const priceCell = dataRow.getCell(3);
-      const amountCell = dataRow.getCell(4);
+      // Style 1C columns (column 4=Цена, column 5=Остаток)
+      const priceCell = dataRow.getCell(4);
+      const amountCell = dataRow.getCell(5);
 
       const oneCBgColor = shouldHighlight ? 'FFFFE0E0' : 'FFF0F0FF'; // Red if highlighted, light blue otherwise
 
@@ -496,8 +496,8 @@ class Excel {
         fgColor: { argb: oneCBgColor }
       };
 
-      // Apply alternating cluster colors and gray font for zeros
-      let colIndex = 5;
+      // Apply alternating cluster colors and gray font for zeros (clusters start at column 6)
+      let colIndex = 6;
       clusterNames.forEach((cluster, clusterIndex) => {
         const isEven = clusterIndex % 2 === 0;
         let bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
@@ -541,8 +541,8 @@ class Excel {
     worksheet.getColumn(2).width = 15; // Штрихкод
     worksheet.getColumn(3).width = 45; // Название
     worksheet.getColumn(4).width = 10; // Цена
-    worksheet.getColumn(4).width = 10; // Остаток (1C)
-    for (let i = 5; i <= headerRow2.length; i++) {
+    worksheet.getColumn(5).width = 10; // Остаток (1C)
+    for (let i = 6; i <= headerRow2.length; i++) {
       worksheet.getColumn(i).width = 10;
     }
 

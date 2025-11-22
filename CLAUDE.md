@@ -112,10 +112,11 @@ Both Ozon and Wildberries follow a similar fulfillment data structure:
 4. Fetch orders from statistics API
 5. Enrich orders with cluster mappings
 6. Aggregate orders by product and cluster
-7. TODO: Add stock data
-8. TODO: Add in-transit data
-9. TODO: Calculate supply needs
-10. TODO: Generate Excel reports
+7. Fetch stock data from stocks API
+8. Fetch in-transit supplies from supplies API
+9. Calculate supply needs based on orders, stock, and in-transit
+10. Enrich with 1C stock data
+11. Generate Excel reports (main report + cluster-specific reports)
 
 ## Key Implementation Details
 

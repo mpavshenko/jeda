@@ -114,10 +114,11 @@ function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, d
       ? order.supplierArticle
       : `${order.supplierArticle}-${order.techSize}`;
 
-    // Skip cancelled orders
-    if (order.isCancel) {
-      return;
-    }
+    // Include all orders (both placed and purchased) for better demand forecasting
+    // Cancelled orders still represent market demand and help with supply planning
+    // if (order.isCancel) {
+    //   return;
+    // }
 
     const cluster = order.cluster || 'Unknown';
     const product = productMap.get(article);
@@ -287,9 +288,6 @@ function calculateStocks(fulfillment, stocks) {
 
     // Add stock quantity (cluster already initialized)
     product.clusters[cluster].stock += stock.quantity || 0;
-
-    // Add in-transit (sum of inWayToClient and inWayFromClient)
-    product.clusters[cluster].in_transit += (stock.inWayToClient || 0) + (stock.inWayFromClient || 0);
   });
 
   // Debug output
@@ -303,6 +301,72 @@ function calculateStocks(fulfillment, stocks) {
 
   if (unmappedWarehouses.size > 0) {
     console.log(`\n=== Unmapped Warehouses in stocks (${unmappedWarehouses.size}) ===`);
+    console.log(`The following warehouses are not in wbConfig.clusters:`);
+    Array.from(unmappedWarehouses).sort().forEach(warehouse => console.log(`  - "${warehouse}"`));
+  }
+}
+
+/* Calculate in-transit quantities from supply data
+   Input: fulfillment array (with products and orders) and supplies from getInTransitSupplies()
+   Output: mutates fulfillment array to add in_transit for each cluster
+
+   Example input supplies:
+   [{
+     supplierArticle: 'D81250',
+     techSize: 'XL',
+     warehouseName: 'Коледино',
+     quantity: 10
+   }]
+*/
+function calculateInTransit(fulfillment, supplies) {
+  // Create product lookup map
+  const productMap = new Map();
+  fulfillment.forEach(product => {
+    productMap.set(product.article, product);
+  });
+
+  // Create warehouse to cluster mapping
+  const warehouseToCluster = {};
+  Object.entries(wbConfig.clusters).forEach(([clusterName, warehouses]) => {
+    warehouses.forEach(warehouse => {
+      warehouseToCluster[warehouse] = clusterName;
+    });
+  });
+
+  const unmappedWarehouses = new Set();
+
+  // Aggregate supplies by product and cluster
+  supplies.forEach(supply => {
+    // Build article from supplierArticle and techSize (same logic as orders)
+    const isShoeSize = supply.techSize && /^\d{2}-\d{2}$/.test(supply.techSize);
+    const shouldSkipSize = !supply.techSize ||
+      supply.techSize === '0' ||
+      supply.techSize === 'универсальный' ||
+      isShoeSize;
+
+    const article = shouldSkipSize
+      ? supply.supplierArticle
+      : `${supply.supplierArticle}-${supply.techSize}`;
+
+    const cluster = warehouseToCluster[supply.warehouseName] || 'Unknown';
+    const product = productMap.get(article);
+
+    if (!product) {
+      // Product not found in catalog - skip
+      return;
+    }
+
+    if (!product.clusters[cluster]) {
+      unmappedWarehouses.add(supply.warehouseName);
+      return;
+    }
+
+    // Add in-transit quantity
+    product.clusters[cluster].in_transit += supply.quantity || 0;
+  });
+
+  if (unmappedWarehouses.size > 0) {
+    console.log(`\n=== Unmapped Warehouses in supplies (${unmappedWarehouses.size}) ===`);
     console.log(`The following warehouses are not in wbConfig.clusters:`);
     Array.from(unmappedWarehouses).sort().forEach(warehouse => console.log(`  - "${warehouse}"`));
   }
@@ -382,6 +446,9 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
 
   const stocks = await wb.getStocks(true);
   calculateStocks(fulfillment, stocks);
+
+  const supplies = await wb.getInTransitSupplies();
+  calculateInTransit(fulfillment, supplies);
 
   calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays);
 
