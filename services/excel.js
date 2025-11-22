@@ -108,8 +108,14 @@ class Excel {
 
     // Style product columns in second header row
     const articleCell = row2.getCell(1);
-    const productCell = row2.getCell(2);
+    const barcodeCell = row2.getCell(2);
+    const productCell = row2.getCell(3);
     articleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+    barcodeCell.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFDDDDDD' } // Light gray
@@ -121,8 +127,8 @@ class Excel {
     };
 
     // Style 1C columns in second header row
-    const priceCell = row2.getCell(3);
-    const amountCell = row2.getCell(4);
+    const priceCell = row2.getCell(4);
+    const amountCell = row2.getCell(5);
     priceCell.fill = {
       type: 'pattern',
       pattern: 'solid',
@@ -135,7 +141,7 @@ class Excel {
     };
 
     // Apply alternating colors to cluster columns in second header row
-    colIndex = 5;
+    colIndex = 6;
     clusterNames.forEach((cluster, clusterIndex) => {
       const isEven = clusterIndex % 2 === 0;
       const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
@@ -245,8 +251,9 @@ class Excel {
 
     // Set column widths
     worksheet.getColumn(1).width = 15; // Артикул
-    worksheet.getColumn(2).width = 45; // Название
-    worksheet.getColumn(3).width = 10; // Цена
+    worksheet.getColumn(2).width = 15; // Штрихкод
+    worksheet.getColumn(3).width = 45; // Название
+    worksheet.getColumn(4).width = 10; // Цена
     worksheet.getColumn(4).width = 10; // Остаток (1C)
     for (let i = 5; i <= headerRow2.length; i++) {
       worksheet.getColumn(i).width = 10;
@@ -325,21 +332,21 @@ class Excel {
 
     // Create 2-level headers
     // Level 1: Product info + 1C + cluster names (each spanning 6 columns)
-    const headerRow1 = ['Товар', '', '1C', ''];
+    const headerRow1 = ['Товар', '', '', '1C', ''];
     clusterNames.forEach(cluster => {
       headerRow1.push(cluster, '', '', '', '', ''); // Cluster spans 6 columns
     });
     worksheet.addRow(headerRow1);
 
     // Level 2: Product details + 1C details + sales metrics for each cluster
-    const headerRow2 = ['Артикул', 'Название', 'Цена', 'Остаток'];
+    const headerRow2 = ['Артикул', 'Штрихкод', 'Название', 'Цена', 'Остаток'];
     clusterNames.forEach(cluster => {
       headerRow2.push('FBO', 'FBS', 'Дневные', 'Остаток', 'В пути', 'Отправить');
     });
     worksheet.addRow(headerRow2);
 
-    // Merge cells for "Товар" header (spans Артикул and Название columns)
-    worksheet.mergeCells(1, 1, 1, 2);
+    // Merge cells for "Товар" header (spans Артикул, Штрихкод and Название columns)
+    worksheet.mergeCells(1, 1, 1, 3);
     const productHeaderCell = worksheet.getCell(1, 1);
     productHeaderCell.value = 'Товар';
     productHeaderCell.alignment = { horizontal: 'center' };
@@ -351,8 +358,8 @@ class Excel {
     };
 
     // Merge cells for "1C" header (spans Цена and Остаток columns)
-    worksheet.mergeCells(1, 3, 1, 4);
-    const oneCHeaderCell = worksheet.getCell(1, 3);
+    worksheet.mergeCells(1, 4, 1, 5);
+    const oneCHeaderCell = worksheet.getCell(1, 4);
     oneCHeaderCell.value = '1C';
     oneCHeaderCell.alignment = { horizontal: 'center' };
     oneCHeaderCell.font = { bold: true };
@@ -363,7 +370,7 @@ class Excel {
     };
 
     // Merge cells for cluster headers (level 1) with alternating colors
-    let colIndex = 5; // Start after 'Артикул', 'Название', 'Цена', 'Остаток'
+    let colIndex = 6; // Start after 'Артикул', 'Штрихкод', 'Название', 'Цена', 'Остаток'
     clusterNames.forEach((cluster, clusterIndex) => {
       worksheet.mergeCells(1, colIndex, 1, colIndex + 5); // Merge 6 columns
       const cell = worksheet.getCell(1, colIndex);
@@ -387,8 +394,14 @@ class Excel {
 
     // Style product columns in second header row
     const articleCell = row2.getCell(1);
-    const productCell = row2.getCell(2);
+    const barcodeCell = row2.getCell(2);
+    const productCell = row2.getCell(3);
     articleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+    barcodeCell.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFDDDDDD' } // Light gray
@@ -400,8 +413,8 @@ class Excel {
     };
 
     // Style 1C columns in second header row
-    const priceCell = row2.getCell(3);
-    const amountCell = row2.getCell(4);
+    const priceCell = row2.getCell(4);
+    const amountCell = row2.getCell(5);
     priceCell.fill = {
       type: 'pattern',
       pattern: 'solid',
@@ -414,7 +427,7 @@ class Excel {
     };
 
     // Apply alternating colors to cluster columns in second header row
-    colIndex = 5;
+    colIndex = 6;
     clusterNames.forEach((cluster, clusterIndex) => {
       const isEven = clusterIndex % 2 === 0;
       const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
@@ -434,6 +447,7 @@ class Excel {
     fulfillment.forEach(product => {
       const rowData = [
         product.article,
+        product.barcode ?? '',
         product.name,
         product.price_1c ?? '',
         product.amount_1c ?? ''
@@ -524,8 +538,9 @@ class Excel {
 
     // Set column widths
     worksheet.getColumn(1).width = 15; // Артикул
-    worksheet.getColumn(2).width = 45; // Название
-    worksheet.getColumn(3).width = 10; // Цена
+    worksheet.getColumn(2).width = 15; // Штрихкод
+    worksheet.getColumn(3).width = 45; // Название
+    worksheet.getColumn(4).width = 10; // Цена
     worksheet.getColumn(4).width = 10; // Остаток (1C)
     for (let i = 5; i <= headerRow2.length; i++) {
       worksheet.getColumn(i).width = 10;
@@ -547,6 +562,7 @@ class Excel {
       if (cluster && cluster.supply_need && cluster.supply_need > 0) {
         clusterData.push({
           'Артикул': product.article,
+          'Штрихкод': product.barcode ?? '',
           'Имя': product.name,
           'Количество': cluster.supply_need
         });
@@ -564,6 +580,7 @@ class Excel {
     // Add headers
     worksheet.columns = [
       { header: 'Артикул', key: 'Артикул', width: 20 },
+      { header: 'Штрихкод', key: 'Штрихкод', width: 15 },
       { header: 'Имя', key: 'Имя', width: 50 },
       { header: 'Количество', key: 'Количество', width: 15 }
     ];

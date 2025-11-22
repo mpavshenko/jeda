@@ -190,7 +190,8 @@ class WB {
   /* Result example:
   [{
     article: 'D81703-XXL',
-    name: 'Куртка рабочая 3 в 1 демисезонная с жилеткой'
+    name: 'Куртка рабочая 3 в 1 демисезонная с жилеткой',
+    barcode: '6933979301097'
   }]
   */
   extractProductsFromCards(cards) {
@@ -200,7 +201,8 @@ class WB {
           article: card.sizes.length === 1
             ? card.vendorCode
             : `${card.vendorCode}-${size.techSize}`,
-          name: card.title
+          name: card.title,
+          barcode: size.skus && size.skus[0] ? size.skus[0] : ''
         }
       )));
   }

@@ -52,6 +52,7 @@ function addProducts(fulfillment, products) {
     fulfillment.push({
       article: product.article,
       name: product.name,
+      barcode: product.barcode,
       clusters
     });
   });
@@ -98,15 +99,25 @@ function aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, d
 
   // Aggregate orders
   ordersWithClusters.forEach(order => {
+    // Build article from supplierArticle and techSize
+    // Skip techSize if it's:
+    // - '0' (default/universal)
+    // - 'универсальный' (universal/one-size)
+    // - shoe size pattern like '40-41', '46-47', '44-45' (treated as single SKU)
+    const isShoeSize = order.techSize && /^\d{2}-\d{2}$/.test(order.techSize);
+    const shouldSkipSize = !order.techSize ||
+      order.techSize === '0' ||
+      order.techSize === 'универсальный' ||
+      isShoeSize;
+
+    const article = shouldSkipSize
+      ? order.supplierArticle
+      : `${order.supplierArticle}-${order.techSize}`;
+
     // Skip cancelled orders
     if (order.isCancel) {
       return;
     }
-
-    // Build article from supplierArticle and techSize
-    const article = order.techSize
-      ? `${order.supplierArticle}-${order.techSize}`
-      : order.supplierArticle;
 
     const cluster = order.cluster || 'Unknown';
     const product = productMap.get(article);
