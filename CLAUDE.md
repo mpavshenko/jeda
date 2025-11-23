@@ -26,6 +26,19 @@ This is a Node.js application for marketplace seller operations. The project pro
 - **services/excel.js**: Excel report generation
 - **services/1c.js**: 1C integration for stock data
 
+### Tests
+Integration tests are located in the `tests/` folder:
+- **tests/test-1c-stock.js**: 1C stock API integration test
+  - Tests connection to 1C service
+  - Validates data structure
+  - Shows stock statistics and sample data
+  - Run with: `node tests/test-1c-stock.js`
+- **tests/test-wb-supplies.js**: WB supplies API integration test
+  - Tests WB supplies API (in-transit data)
+  - Validates supply data aggregation
+  - Shows warehouse mappings
+  - Run with: `node tests/test-wb-supplies.js`
+
 ### Environment Variables
 - **Ozon**: `OZON_CLIENT_ID`, `OZON_API_KEY`, `OZON_BASE_URL`
 - **Wildberries**: `WB_API_TOKEN`

@@ -184,6 +184,7 @@ function merge1CStock(fulfillment, oneCStocks) {
   oneCStocks.forEach(item => {
     stockByArticul[item.Articul] = {
       price: parseFloat(item.Price.replace(',', '.')),
+      cost: item.CenaSeb && item.CenaSeb.trim() !== '' ? parseFloat(item.CenaSeb.replace(',', '.')) : null,
       amount: item.Amount
     };
   });
@@ -195,9 +196,11 @@ function merge1CStock(fulfillment, oneCStocks) {
 
     if (stock1C) {
       product.price_1c = stock1C.price;
+      product.cost_1c = stock1C.cost;
       product.amount_1c = stock1C.amount;
     } else {
       product.price_1c = null;
+      product.cost_1c = null;
       product.amount_1c = null;
     }
   });
@@ -503,6 +506,13 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
       console.log(`Saved: ${fname}`);
     }
   }
+
+  console.log('\nGenerating WB cost summary report...');
+  const costBuffer = await Excel.createWbCostSummaryReportBuffer(fulfillment);
+  const generationDate = `${formatDate(toDate)}_${hours}-${minutes}`;
+  const costFilename = path.join(outputDir, `wb_cost_summary_${generationDate}.xlsx`);
+  await fs.writeFile(costFilename, costBuffer);
+  console.log(`Saved: ${costFilename}`);
 }
 
 async function main() {

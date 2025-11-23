@@ -13,6 +13,7 @@ function merge1CStock(ordersWithStocks, oneCStocks) {
   oneCStocks.forEach(item => {
     stockByArticul[item.Articul] = {
       price: parseFloat(item.Price.replace(',', '.')),
+      cost: item.CenaSeb && item.CenaSeb.trim() !== '' ? parseFloat(item.CenaSeb.replace(',', '.')) : null,
       amount: item.Amount
     };
   });
@@ -21,9 +22,11 @@ function merge1CStock(ordersWithStocks, oneCStocks) {
     const stock1C = stockByArticul[product.offer_id];
     if (stock1C) {
       product.price_1c = stock1C.price;
+      product.cost_1c = stock1C.cost;
       product.amount_1c = stock1C.amount;
     } else {
       product.price_1c = null;
+      product.cost_1c = null;
       product.amount_1c = null;
     }
   });
@@ -147,7 +150,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   console.log('\nGenerating main supply report...');
   const mainBuffer = await Excel.createFulfillmentReportBuffer(ordersWithStocks);
 
-  const fname = path.join(outputDir, `fulfillment_${dateRange}.xlsx`);
+  const fname = path.join(outputDir, `ozon_fulfillment_${dateRange}.xlsx`);
   await fs.writeFile(fname, mainBuffer);
   console.log(`Saved: ${fname}`);
 
@@ -155,11 +158,18 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   for (const clusterName of clusterNames) {
     const clusterBuffer = await Excel.createClusterFulfillmentReportBuffer(clusterName, ordersWithStocks);
     if (clusterBuffer) {
-      const fname = path.join(outputDir, `fulfillment_${clusterName}_${dateRange}.xlsx`);
+      const fname = path.join(outputDir, `ozon_fulfillment_${clusterName}_${dateRange}.xlsx`);
       await fs.writeFile(fname, clusterBuffer);
       console.log(`Saved: ${fname}`);
     }
   }
+
+  console.log('\nGenerating cost summary report...');
+  const costBuffer = await Excel.createCostSummaryReportBuffer(ordersWithStocks);
+  const generationDate = `${formatDate(toDate)}_${hours}-${minutes}`;
+  const costFilename = path.join(outputDir, `ozon_cost_summary_${generationDate}.xlsx`);
+  await fs.writeFile(costFilename, costBuffer);
+  console.log(`Saved: ${costFilename}`);
 }
 
 async function main() {

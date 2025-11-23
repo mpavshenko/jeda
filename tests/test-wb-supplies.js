@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const WB = require('./services/wb');
+const WB = require('../services/wb');
 
 async function testSuppliesIntegration() {
   console.log('=== WB Supplies API Integration Test ===\n');
@@ -58,7 +58,7 @@ async function testSuppliesIntegration() {
       });
 
       // Check for unmapped warehouses (not in wbConfig)
-      const { wbConfig } = require('./config');
+      const { wbConfig } = require('../config');
       const mappedWarehouses = new Set();
       Object.values(wbConfig.clusters).forEach(warehouses => {
         warehouses.forEach(w => mappedWarehouses.add(w));

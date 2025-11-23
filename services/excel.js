@@ -106,29 +106,23 @@ class Excel {
     const row2 = worksheet.getRow(2);
     row2.font = { bold: true };
 
-    // Style product columns in second header row
+    // Style product columns in second header row (Ozon has no barcode)
     const articleCell = row2.getCell(1);
-    const barcodeCell = row2.getCell(2);
-    const productCell = row2.getCell(3);
+    const nameCell = row2.getCell(2);
     articleCell.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFDDDDDD' } // Light gray
     };
-    barcodeCell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFDDDDDD' } // Light gray
-    };
-    productCell.fill = {
+    nameCell.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFDDDDDD' } // Light gray
     };
 
     // Style 1C columns in second header row
-    const priceCell = row2.getCell(4);
-    const amountCell = row2.getCell(5);
+    const priceCell = row2.getCell(3);
+    const amountCell = row2.getCell(4);
     priceCell.fill = {
       type: 'pattern',
       pattern: 'solid',
@@ -141,7 +135,7 @@ class Excel {
     };
 
     // Apply alternating colors to cluster columns in second header row
-    colIndex = 6;
+    colIndex = 5;
     clusterNames.forEach((cluster, clusterIndex) => {
       const isEven = clusterIndex % 2 === 0;
       const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
@@ -251,9 +245,8 @@ class Excel {
 
     // Set column widths
     worksheet.getColumn(1).width = 15; // Артикул
-    worksheet.getColumn(2).width = 15; // Штрихкод
-    worksheet.getColumn(3).width = 45; // Название
-    worksheet.getColumn(4).width = 10; // Цена
+    worksheet.getColumn(2).width = 45; // Название
+    worksheet.getColumn(3).width = 10; // Цена (1C)
     worksheet.getColumn(4).width = 10; // Остаток (1C)
     for (let i = 5; i <= headerRow2.length; i++) {
       worksheet.getColumn(i).width = 10;
@@ -314,6 +307,318 @@ class Excel {
     });
 
     console.log(`Created cluster report for ${clusterName} (${clusterData.length} items)`);
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  static async createCostSummaryReportBuffer(ordersWithStocks) {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Cost Summary');
+
+    if (ordersWithStocks.length === 0) {
+      return await workbook.xlsx.writeBuffer();
+    }
+
+    // Get all cluster names from all products (excluding Unknown) and order by config
+    const allClusters = new Set();
+    ordersWithStocks.forEach(product => {
+      Object.keys(product.clusters).forEach(cluster => {
+        if (cluster !== 'Unknown') {
+          allClusters.add(cluster);
+        }
+      });
+    });
+
+    // Order clusters: first by config.js order, then any remaining clusters alphabetically
+    const configClusters = CLUSTER_ORDER.filter(cluster => allClusters.has(cluster));
+    const remainingClusters = Array.from(allClusters)
+      .filter(cluster => !CLUSTER_ORDER.includes(cluster))
+      .sort();
+    const clusterNames = [...configClusters, ...remainingClusters];
+
+    // Create 2-level headers
+    // Level 1: Product info + 1C + cluster names (each spanning 2 columns) + Total
+    const headerRow1 = ['Товар', '', '1C', '', ''];
+    clusterNames.forEach(cluster => {
+      headerRow1.push(cluster, ''); // Cluster spans 2 columns
+    });
+    headerRow1.push('Итого');
+    worksheet.addRow(headerRow1);
+
+    // Level 2: Product details + stock metrics for each cluster
+    const headerRow2 = ['Артикул', 'Название', 'Себест.', 'Цена', 'Остаток'];
+    clusterNames.forEach(cluster => {
+      headerRow2.push('Остаток', 'Стоимость');
+    });
+    headerRow2.push('Стоимость');
+    worksheet.addRow(headerRow2);
+
+    // Merge cells for "Товар" header (spans Артикул and Название columns)
+    worksheet.mergeCells(1, 1, 1, 2);
+    const productHeaderCell = worksheet.getCell(1, 1);
+    productHeaderCell.value = 'Товар';
+    productHeaderCell.alignment = { horizontal: 'center' };
+    productHeaderCell.font = { bold: true };
+    productHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray for product section
+    };
+
+    // Merge cells for "1C" header (spans Себест., Цена and Остаток columns)
+    worksheet.mergeCells(1, 3, 1, 5);
+    const oneCHeaderCell = worksheet.getCell(1, 3);
+    oneCHeaderCell.value = '1C';
+    oneCHeaderCell.alignment = { horizontal: 'center' };
+    oneCHeaderCell.font = { bold: true };
+    oneCHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+
+    // Merge cells for cluster headers (level 1) with alternating colors
+    let colIndex = 6; // Start after 'Артикул', 'Название', 'Себест.', 'Цена', 'Остаток'
+    clusterNames.forEach((cluster, clusterIndex) => {
+      worksheet.mergeCells(1, colIndex, 1, colIndex + 1); // Merge 2 columns
+      const cell = worksheet.getCell(1, colIndex);
+      cell.value = cluster;
+      cell.alignment = { horizontal: 'center' };
+      cell.font = { bold: true };
+
+      // Alternate between yellow and green colors
+      const isEven = clusterIndex % 2 === 0;
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: isEven ? 'FFFFF2CC' : 'FFE8F5E8' } // Light yellow / Light green
+      };
+      colIndex += 2;
+    });
+
+    // Style "Итого" header cell
+    const totalHeaderCol = 6 + clusterNames.length * 2;
+    const totalHeaderCell = worksheet.getCell(1, totalHeaderCol);
+    totalHeaderCell.value = 'Итого';
+    totalHeaderCell.alignment = { horizontal: 'center' };
+    totalHeaderCell.font = { bold: true };
+    totalHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Style second header row with alternating colors
+    const row2 = worksheet.getRow(2);
+    row2.font = { bold: true };
+
+    // Style product columns in second header row
+    const articleCell = row2.getCell(1);
+    const nameCell = row2.getCell(2);
+    articleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+    nameCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+
+    // Style 1C columns in second header row
+    const costCell = row2.getCell(3);
+    const priceCell = row2.getCell(4);
+    const stockCell = row2.getCell(5);
+    costCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+    priceCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+    stockCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+
+    // Style total column header in second row
+    const totalColCell = row2.getCell(totalHeaderCol);
+    totalColCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Apply alternating colors to cluster columns in second header row
+    colIndex = 6;
+    clusterNames.forEach((cluster, clusterIndex) => {
+      const isEven = clusterIndex % 2 === 0;
+      const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
+
+      for (let i = 0; i < 2; i++) {
+        const cell = row2.getCell(colIndex + i);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: bgColor }
+        };
+      }
+      colIndex += 2;
+    });
+
+    // Initialize column totals
+    const columnTotals = clusterNames.map(() => 0);
+
+    // Add data rows with alternating cluster colors
+    ordersWithStocks.forEach(product => {
+      const rowData = [
+        product.offer_id,
+        product.name,
+        product.cost_1c ?? '',
+        product.price_1c ?? '',
+        product.amount_1c ?? ''
+      ];
+
+      let rowTotal = 0;
+
+      clusterNames.forEach((clusterName, clusterIndex) => {
+        const clusterData = product.clusters[clusterName];
+        if (clusterData) {
+          const stock = clusterData.stock || 0;
+          const cost = product.cost_1c;
+          const stockValue = (cost != null && stock > 0) ? stock * cost : 0;
+
+          rowData.push(
+            stock,
+            stockValue
+          );
+
+          rowTotal += stockValue;
+          columnTotals[clusterIndex] += stockValue;
+        } else {
+          rowData.push(0, 0);
+        }
+      });
+
+      rowData.push(rowTotal); // Add row total
+      const dataRow = worksheet.addRow(rowData);
+
+      // Style 1C columns (columns 3, 4, 5) with 1C blue background
+      [3, 4, 5].forEach(colNum => {
+        const cell = dataRow.getCell(colNum);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0F0FF' } // Light blue for 1C section
+        };
+        if (cell.value != null && cell.value !== '' && colNum !== 5) {
+          cell.numFmt = '#,##0.00'; // Format as money with 2 decimal places (not for amount)
+        }
+      });
+
+      // Style row total cell with orange background
+      const rowTotalCell = dataRow.getCell(totalHeaderCol);
+      rowTotalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFEEDD' } // Light orange for totals
+      };
+      rowTotalCell.numFmt = '#,##0.00';
+      rowTotalCell.font = { bold: true };
+
+      // Apply alternating cluster colors
+      let colIndex = 6;
+      clusterNames.forEach((cluster, clusterIndex) => {
+        const isEven = clusterIndex % 2 === 0;
+        const bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
+
+        for (let i = 0; i < 2; i++) {
+          const cell = dataRow.getCell(colIndex + i);
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: bgColor }
+          };
+
+          // Apply gray font color for zero or null values
+          if (cell.value === 0 || cell.value === null || cell.value === '') {
+            cell.font = { color: { argb: 'FF999999' } }; // Gray color for zeros/nulls
+          }
+
+          // Format "Стоимость" column with money formatting (every second column starting from colIndex)
+          if (i === 1 && cell.value != null) {
+            cell.numFmt = '#,##0.00'; // Format as money with 2 decimal places
+          }
+        }
+        colIndex += 2;
+      });
+    });
+
+    // Add totals row
+    const totalsRowData = ['', 'ИТОГО', '', '', ''];
+    let grandTotal = 0;
+
+    clusterNames.forEach((clusterName, clusterIndex) => {
+      totalsRowData.push(''); // Empty for stock column
+      totalsRowData.push(columnTotals[clusterIndex]); // Total value
+      grandTotal += columnTotals[clusterIndex];
+    });
+
+    totalsRowData.push(grandTotal); // Grand total
+    const totalsRow = worksheet.addRow(totalsRowData);
+
+    // Style totals row
+    totalsRow.font = { bold: true };
+
+    // Style "ИТОГО" label cells
+    totalsRow.getCell(2).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Style cluster total cells
+    colIndex = 6;
+    clusterNames.forEach((cluster, clusterIndex) => {
+      // Skip stock column (colIndex)
+      const totalCell = totalsRow.getCell(colIndex + 1);
+      totalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFCC99' } // Orange for totals
+      };
+      totalCell.numFmt = '#,##0.00';
+      colIndex += 2;
+    });
+
+    // Style grand total cell
+    const grandTotalCell = totalsRow.getCell(totalHeaderCol);
+    grandTotalCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFF9966' } // Darker orange for grand total
+    };
+    grandTotalCell.numFmt = '#,##0.00';
+
+    // Set column widths
+    worksheet.getColumn(1).width = 15; // Артикул
+    worksheet.getColumn(2).width = 45; // Название
+    worksheet.getColumn(3).width = 10; // Себест.
+    worksheet.getColumn(4).width = 10; // Цена
+    worksheet.getColumn(5).width = 10; // Остаток
+    for (let i = 6; i <= headerRow2.length; i++) {
+      worksheet.getColumn(i).width = 12;
+    }
+
+    // Freeze the header rows (first 2 rows) and first column (Артикул)
+    worksheet.views = [
+      { state: 'frozen', xSplit: 1, ySplit: 2 }
+    ];
+
     return await workbook.xlsx.writeBuffer();
   }
 
@@ -602,6 +907,304 @@ class Excel {
     });
 
     console.log(`Created WB cluster report for ${clusterName} (${clusterData.length} items)`);
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  static async createWbCostSummaryReportBuffer(fulfillment) {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Cost Summary');
+
+    if (fulfillment.length === 0) {
+      return await workbook.xlsx.writeBuffer();
+    }
+
+    // Use WB cluster order from config
+    const clusterNames = WB_CLUSTER_ORDER;
+
+    // Create 2-level headers
+    // Level 1: Product info + 1C + cluster names (each spanning 2 columns) + Total
+    const headerRow1 = ['Товар', '', '1C', '', ''];
+    clusterNames.forEach(cluster => {
+      headerRow1.push(cluster, ''); // Cluster spans 2 columns
+    });
+    headerRow1.push('Итого');
+    worksheet.addRow(headerRow1);
+
+    // Level 2: Product details + stock metrics for each cluster
+    const headerRow2 = ['Артикул', 'Название', 'Себест.', 'Цена', 'Остаток'];
+    clusterNames.forEach(cluster => {
+      headerRow2.push('Остаток', 'Стоимость');
+    });
+    headerRow2.push('Стоимость');
+    worksheet.addRow(headerRow2);
+
+    // Merge cells for "Товар" header (spans Артикул and Название columns)
+    worksheet.mergeCells(1, 1, 1, 2);
+    const productHeaderCell = worksheet.getCell(1, 1);
+    productHeaderCell.value = 'Товар';
+    productHeaderCell.alignment = { horizontal: 'center' };
+    productHeaderCell.font = { bold: true };
+    productHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray for product section
+    };
+
+    // Merge cells for "1C" header (spans Себест., Цена and Остаток columns)
+    worksheet.mergeCells(1, 3, 1, 5);
+    const oneCHeaderCell = worksheet.getCell(1, 3);
+    oneCHeaderCell.value = '1C';
+    oneCHeaderCell.alignment = { horizontal: 'center' };
+    oneCHeaderCell.font = { bold: true };
+    oneCHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+
+    // Merge cells for cluster headers (level 1) with alternating colors
+    let colIndex = 6; // Start after 'Артикул', 'Название', 'Себест.', 'Цена', 'Остаток'
+    clusterNames.forEach((cluster, clusterIndex) => {
+      worksheet.mergeCells(1, colIndex, 1, colIndex + 1); // Merge 2 columns
+      const cell = worksheet.getCell(1, colIndex);
+      cell.value = cluster;
+      cell.alignment = { horizontal: 'center' };
+      cell.font = { bold: true };
+
+      // Alternate between yellow and green colors
+      const isEven = clusterIndex % 2 === 0;
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: isEven ? 'FFFFF2CC' : 'FFE8F5E8' } // Light yellow / Light green
+      };
+      colIndex += 2;
+    });
+
+    // Style "Итого" header cell
+    const totalHeaderCol = 6 + clusterNames.length * 2;
+    const totalHeaderCell = worksheet.getCell(1, totalHeaderCol);
+    totalHeaderCell.value = 'Итого';
+    totalHeaderCell.alignment = { horizontal: 'center' };
+    totalHeaderCell.font = { bold: true };
+    totalHeaderCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Style second header row with alternating colors
+    const row2 = worksheet.getRow(2);
+    row2.font = { bold: true };
+
+    // Style product columns in second header row
+    const articleCell = row2.getCell(1);
+    const nameCell = row2.getCell(2);
+    articleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+    nameCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDDDDDD' } // Light gray
+    };
+
+    // Style 1C columns in second header row
+    const costCell = row2.getCell(3);
+    const priceCell = row2.getCell(4);
+    const stockCell = row2.getCell(5);
+    costCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+    priceCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+    stockCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0FF' } // Light blue for 1C section
+    };
+
+    // Style total column header in second row
+    const totalColCell = row2.getCell(totalHeaderCol);
+    totalColCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Apply alternating colors to cluster columns in second header row
+    colIndex = 6;
+    clusterNames.forEach((cluster, clusterIndex) => {
+      const isEven = clusterIndex % 2 === 0;
+      const bgColor = isEven ? 'FFFFF2CC' : 'FFE8F5E8'; // Light yellow / Light green
+
+      for (let i = 0; i < 2; i++) {
+        const cell = row2.getCell(colIndex + i);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: bgColor }
+        };
+      }
+      colIndex += 2;
+    });
+
+    // Initialize column totals
+    const columnTotals = clusterNames.map(() => 0);
+
+    // Add data rows with alternating cluster colors
+    fulfillment.forEach(product => {
+      const rowData = [
+        product.article,
+        product.name,
+        product.cost_1c ?? '',
+        product.price_1c ?? '',
+        product.amount_1c ?? ''
+      ];
+
+      let rowTotal = 0;
+
+      clusterNames.forEach((clusterName, clusterIndex) => {
+        const clusterData = product.clusters[clusterName];
+        if (clusterData) {
+          const stock = clusterData.stock || 0;
+          const cost = product.cost_1c;
+          const stockValue = (cost != null && stock > 0) ? stock * cost : 0;
+
+          rowData.push(
+            stock,
+            stockValue
+          );
+
+          rowTotal += stockValue;
+          columnTotals[clusterIndex] += stockValue;
+        } else {
+          rowData.push(0, 0);
+        }
+      });
+
+      rowData.push(rowTotal); // Add row total
+      const dataRow = worksheet.addRow(rowData);
+
+      // Style 1C columns (columns 3, 4, 5) with 1C blue background
+      [3, 4, 5].forEach(colNum => {
+        const cell = dataRow.getCell(colNum);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0F0FF' } // Light blue for 1C section
+        };
+        if (cell.value != null && cell.value !== '' && colNum !== 5) {
+          cell.numFmt = '#,##0.00'; // Format as money with 2 decimal places (not for amount)
+        }
+      });
+
+      // Style row total cell with orange background
+      const rowTotalCell = dataRow.getCell(totalHeaderCol);
+      rowTotalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFEEDD' } // Light orange for totals
+      };
+      rowTotalCell.numFmt = '#,##0.00';
+      rowTotalCell.font = { bold: true };
+
+      // Apply alternating cluster colors
+      let colIndex = 6;
+      clusterNames.forEach((cluster, clusterIndex) => {
+        const isEven = clusterIndex % 2 === 0;
+        const bgColor = isEven ? 'FFFFFAEF' : 'FFF8FDF8'; // Very light yellow / Very light green
+
+        for (let i = 0; i < 2; i++) {
+          const cell = dataRow.getCell(colIndex + i);
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: bgColor }
+          };
+
+          // Apply gray font color for zero or null values
+          if (cell.value === 0 || cell.value === null || cell.value === '') {
+            cell.font = { color: { argb: 'FF999999' } }; // Gray color for zeros/nulls
+          }
+
+          // Format "Стоимость" column with money formatting (every second column starting from colIndex)
+          if (i === 1 && cell.value != null) {
+            cell.numFmt = '#,##0.00'; // Format as money with 2 decimal places
+          }
+        }
+        colIndex += 2;
+      });
+    });
+
+    // Add totals row
+    const totalsRowData = ['', 'ИТОГО', '', '', ''];
+    let grandTotal = 0;
+
+    clusterNames.forEach((clusterName, clusterIndex) => {
+      totalsRowData.push(''); // Empty for stock column
+      totalsRowData.push(columnTotals[clusterIndex]); // Total value
+      grandTotal += columnTotals[clusterIndex];
+    });
+
+    totalsRowData.push(grandTotal); // Grand total
+    const totalsRow = worksheet.addRow(totalsRowData);
+
+    // Style totals row
+    totalsRow.font = { bold: true };
+
+    // Style "ИТОГО" label cells
+    totalsRow.getCell(2).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCC99' } // Orange for totals
+    };
+
+    // Style cluster total cells
+    colIndex = 6;
+    clusterNames.forEach((cluster, clusterIndex) => {
+      // Skip stock column (colIndex)
+      const totalCell = totalsRow.getCell(colIndex + 1);
+      totalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFCC99' } // Orange for totals
+      };
+      totalCell.numFmt = '#,##0.00';
+      colIndex += 2;
+    });
+
+    // Style grand total cell
+    const grandTotalCell = totalsRow.getCell(totalHeaderCol);
+    grandTotalCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFF9966' } // Darker orange for grand total
+    };
+    grandTotalCell.numFmt = '#,##0.00';
+
+    // Set column widths
+    worksheet.getColumn(1).width = 15; // Артикул
+    worksheet.getColumn(2).width = 45; // Название
+    worksheet.getColumn(3).width = 10; // Себест.
+    worksheet.getColumn(4).width = 10; // Цена
+    worksheet.getColumn(5).width = 10; // Остаток
+    for (let i = 6; i <= headerRow2.length; i++) {
+      worksheet.getColumn(i).width = 12;
+    }
+
+    // Freeze the header rows (first 2 rows) and first column (Артикул)
+    worksheet.views = [
+      { state: 'frozen', xSplit: 1, ySplit: 2 }
+    ];
+
     return await workbook.xlsx.writeBuffer();
   }
 }
