@@ -447,7 +447,7 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
   const ordersWithClusters = wb.enrichOrdersWithClusters(orders);
   aggregateOrdersByProductsAndClusters(fulfillment, ordersWithClusters, daysCovered);
 
-  const stocks = await wb.getStocks(true);
+  const stocks = await wb.getStocks(false);
   calculateStocks(fulfillment, stocks);
 
   const supplies = await wb.getInTransitSupplies();

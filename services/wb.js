@@ -504,7 +504,7 @@ class WB {
     quantity: 10
   }]
   */
-  async getInTransitSupplies(daysBack = 30) {
+  async getInTransitSupplies(daysBack = 30, limit = null) {
     try {
       const allGoods = [];
 
@@ -524,24 +524,30 @@ class WB {
       // Get supplies with status 2, 3, 4, 5, 6 (in transit and recently delivered)
       // Status: 2=Planned, 3=Unloading allowed, 4=Accepting, 5=Accepted, 6=Unloaded
       const response = await this.suppliesClient.post('/api/v1/supplies', {
-        statusIDs: [2, 3, 4, 5, 6],
+        // statusIDs: [2, 3, 4, 5, 6],
+        statusIDs: [3],
         from: formatDate(fromDate),
         till: formatDate(toDate),
         type: 'createDate'  // Filter by supply creation date
       });
 
       const supplies = Array.isArray(response.data) ? response.data : [];
-      console.log(`Found ${supplies.length} supplies (last ${daysBack} days, statuses 2-6)`);
+      const suppliesToProcess = limit ? supplies.slice(0, limit) : supplies;
+      console.log(`Found ${supplies.length} supplies (last ${daysBack} days, statuses = 3)`);
+      if (limit) {
+        console.log(`Limiting to ${suppliesToProcess.length} supplies for debugging`);
+      }
 
       // For each supply, get details and goods
-      for (let i = 0; i < supplies.length; i++) {
-        const supply = supplies[i];
+      for (let i = 0; i < suppliesToProcess.length; i++) {
+        const supply = suppliesToProcess[i];
         try {
-          console.log(`Processing supply ${i + 1}/${supplies.length} (ID: ${supply.supplyID})...`);
+          console.log(`Processing supply ${i + 1}/${suppliesToProcess.length} (ID: ${supply.supplyID})...`);
 
           // Get supply details to get warehouse name
           const detailsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}`);
-          const warehouseName = detailsResponse.data.warehouseName;
+          const supplyDetails = detailsResponse.data;
+          const warehouseName = supplyDetails.warehouseName;
 
           // Get goods in this supply
           const goodsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}/goods`, {
@@ -551,13 +557,22 @@ class WB {
           const goods = Array.isArray(goodsResponse.data) ? goodsResponse.data : [];
           console.log(`  └─ ${warehouseName}: ${goods.length} products`);
 
-          // Add warehouse info to each good
+          // Get status ID
+          const statusID = supply.statusID || supplyDetails.statusID || 0;
+
+          // Add warehouse info and supply details to each good
           goods.forEach(good => {
             allGoods.push({
               supplierArticle: good.vendorCode,
               techSize: good.techSize || '',
               warehouseName: warehouseName,
-              quantity: good.quantity || 0
+              quantity: good.quantity || 0,
+              supplyID: supply.supplyID,
+              supplyName: supplyDetails.name || supply.supplyID,
+              createdAt: supplyDetails.createdAt || supply.createdAt || '',
+              closedAt: supplyDetails.closedAt || supply.closedAt || '',
+              scanDate: supplyDetails.scanDate || supply.scanDate || '',
+              statusID: statusID
             });
           });
 
