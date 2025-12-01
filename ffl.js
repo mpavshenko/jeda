@@ -175,7 +175,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
 async function main() {
   console.log("Starting fulfillment calculation script...");
 
-  await fulfillmentReport();
+  await fulfillmentReport(28, 45);
 }
 
 // Only run main if this file is executed directly

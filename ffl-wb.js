@@ -516,7 +516,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
 }
 
 async function main() {
-  await fulfillmentReport();
+  await fulfillmentReport(28, 45);
 }
 
 // Only run if executed directly, not when imported as module
