@@ -1207,6 +1207,229 @@ class Excel {
 
     return await workbook.xlsx.writeBuffer();
   }
+
+  static async createManagementHierarchyReportBuffer(products) {
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Management Report');
+
+    // Build hierarchy: Brand → Group → Subgroup → Products
+    const hierarchy = {};
+    products.forEach(product => {
+      const brand = product.brand || 'Без бренда';
+      const group = product.group || 'Без группы';
+      const subgroup = product.subgroup || 'Без подгруппы';
+
+      if (!hierarchy[brand]) {
+        hierarchy[brand] = {};
+      }
+      if (!hierarchy[brand][group]) {
+        hierarchy[brand][group] = {};
+      }
+      if (!hierarchy[brand][group][subgroup]) {
+        hierarchy[brand][group][subgroup] = [];
+      }
+      hierarchy[brand][group][subgroup].push(product);
+    });
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'Бренд', key: 'brand', width: 30 },
+      { header: 'Группа', key: 'group', width: 30 },
+      { header: 'Подгруппа', key: 'subgroup', width: 30 },
+      { header: 'Артикул', key: 'articul', width: 20 },
+      { header: 'Название', key: 'name', width: 45 },
+      { header: 'Цена', key: 'price', width: 12 },
+      { header: 'Себест.', key: 'cost', width: 12 },
+      { header: 'Остаток 1C', key: 'stock_1c', width: 12 },
+      { header: 'Остаток Ozon', key: 'stock_ozon', width: 12 },
+      { header: 'Остаток Ozon ₽', key: 'stock_ozon_value', width: 15 },
+      { header: 'FBO Sold', key: 'fbo', width: 12 },
+      { header: 'FBO Sold ₽', key: 'fbo_value', width: 15 }
+    ];
+
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    headerRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    let rowIndex = 2;
+
+    // Iterate through hierarchy
+    Object.keys(hierarchy).sort().forEach(brand => {
+      // Calculate brand totals
+      const brandProducts = Object.values(hierarchy[brand])
+        .flatMap(group => Object.values(group))
+        .flatMap(products => products);
+      const brandFbo = brandProducts.reduce((sum, p) => sum + p.fbo_count, 0);
+      const brandStock = brandProducts.reduce((sum, p) => sum + p.stock_count, 0);
+      const brandStockValue = brandProducts.reduce((sum, p) => {
+        const cost = p.cost_1c || 0;
+        return sum + (p.stock_count * cost);
+      }, 0);
+      const brandFboValue = brandProducts.reduce((sum, p) => {
+        const cost = p.cost_1c || 0;
+        return sum + (p.fbo_count * cost);
+      }, 0);
+
+      // Add brand row
+      const brandRow = worksheet.getRow(rowIndex++);
+      brandRow.getCell(1).value = brand;
+      brandRow.getCell(9).value = brandStock;
+      brandRow.getCell(10).value = brandStockValue;
+      brandRow.getCell(11).value = brandFbo;
+      brandRow.getCell(12).value = brandFboValue;
+      brandRow.outlineLevel = 0;
+      brandRow.font = { bold: true, size: 12 };
+      brandRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' }
+      };
+      brandRow.getCell(9).numFmt = '#,##0';
+      brandRow.getCell(10).numFmt = '#,##0.00';
+      brandRow.getCell(11).numFmt = '#,##0';
+      brandRow.getCell(12).numFmt = '#,##0.00';
+
+      Object.keys(hierarchy[brand]).sort().forEach(group => {
+        // Calculate group totals
+        const groupProducts = Object.values(hierarchy[brand][group])
+          .flatMap(products => products);
+        const groupFbo = groupProducts.reduce((sum, p) => sum + p.fbo_count, 0);
+        const groupStock = groupProducts.reduce((sum, p) => sum + p.stock_count, 0);
+        const groupStockValue = groupProducts.reduce((sum, p) => {
+          const cost = p.cost_1c || 0;
+          return sum + (p.stock_count * cost);
+        }, 0);
+        const groupFboValue = groupProducts.reduce((sum, p) => {
+          const cost = p.cost_1c || 0;
+          return sum + (p.fbo_count * cost);
+        }, 0);
+
+        // Add group row
+        const groupRow = worksheet.getRow(rowIndex++);
+        groupRow.getCell(2).value = group;
+        groupRow.getCell(9).value = groupStock;
+        groupRow.getCell(10).value = groupStockValue;
+        groupRow.getCell(11).value = groupFbo;
+        groupRow.getCell(12).value = groupFboValue;
+        groupRow.outlineLevel = 1;
+        groupRow.font = { bold: true, size: 11 };
+        groupRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF2F2F2' }
+        };
+        groupRow.getCell(9).numFmt = '#,##0';
+        groupRow.getCell(10).numFmt = '#,##0.00';
+        groupRow.getCell(11).numFmt = '#,##0';
+        groupRow.getCell(12).numFmt = '#,##0.00';
+
+        Object.keys(hierarchy[brand][group]).sort().forEach(subgroup => {
+          // Calculate subgroup totals
+          const subgroupProducts = hierarchy[brand][group][subgroup];
+          const subgroupFbo = subgroupProducts.reduce((sum, p) => sum + p.fbo_count, 0);
+          const subgroupStock = subgroupProducts.reduce((sum, p) => sum + p.stock_count, 0);
+          const subgroupStockValue = subgroupProducts.reduce((sum, p) => {
+            const cost = p.cost_1c || 0;
+            return sum + (p.stock_count * cost);
+          }, 0);
+          const subgroupFboValue = subgroupProducts.reduce((sum, p) => {
+            const cost = p.cost_1c || 0;
+            return sum + (p.fbo_count * cost);
+          }, 0);
+
+          // Add subgroup row
+          const subgroupRow = worksheet.getRow(rowIndex++);
+          subgroupRow.getCell(3).value = subgroup;
+          subgroupRow.getCell(9).value = subgroupStock;
+          subgroupRow.getCell(10).value = subgroupStockValue;
+          subgroupRow.getCell(11).value = subgroupFbo;
+          subgroupRow.getCell(12).value = subgroupFboValue;
+          subgroupRow.outlineLevel = 2;
+          subgroupRow.font = { bold: true, size: 10 };
+          subgroupRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFAFAFA' }
+          };
+          subgroupRow.getCell(9).numFmt = '#,##0';
+          subgroupRow.getCell(10).numFmt = '#,##0.00';
+          subgroupRow.getCell(11).numFmt = '#,##0';
+          subgroupRow.getCell(12).numFmt = '#,##0.00';
+
+          // Add product rows
+          hierarchy[brand][group][subgroup]
+            .sort((a, b) => b.fbo_count - a.fbo_count)
+            .forEach(product => {
+              const cost = product.cost_1c || 0;
+              const stockValue = product.stock_count * cost;
+              const fboValue = product.fbo_count * cost;
+
+              const productRow = worksheet.getRow(rowIndex++);
+              productRow.getCell(4).value = product.offer_id;
+              productRow.getCell(5).value = product.name || '';
+              productRow.getCell(6).value = product.price_1c;
+              productRow.getCell(7).value = product.cost_1c;
+              productRow.getCell(8).value = product.amount_1c;
+              productRow.getCell(9).value = product.stock_count;
+              productRow.getCell(10).value = stockValue;
+              productRow.getCell(11).value = product.fbo_count;
+              productRow.getCell(12).value = fboValue;
+              productRow.outlineLevel = 3;
+
+              // Format numbers
+              if (product.price_1c !== null) {
+                productRow.getCell(6).numFmt = '#,##0.00';
+              }
+              if (product.cost_1c !== null) {
+                productRow.getCell(7).numFmt = '#,##0.00';
+              }
+              if (product.amount_1c !== null) {
+                productRow.getCell(8).numFmt = '#,##0';
+              }
+              productRow.getCell(9).numFmt = '#,##0';
+              productRow.getCell(10).numFmt = '#,##0.00';
+              productRow.getCell(11).numFmt = '#,##0';
+              productRow.getCell(12).numFmt = '#,##0.00';
+
+              // Alternate row colors for products
+              if (rowIndex % 2 === 0) {
+                productRow.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFFFFFFF' }
+                };
+              }
+            });
+        });
+      });
+    });
+
+    // Freeze the header row and first column
+    worksheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1 }
+    ];
+
+    // Set outline properties to show expand/collapse buttons
+    worksheet.properties.outlineLevelCol = 0;
+    worksheet.properties.outlineLevelRow = 3;
+
+    return await workbook.xlsx.writeBuffer();
+  }
 }
 
 module.exports = Excel;
