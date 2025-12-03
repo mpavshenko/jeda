@@ -26,14 +26,12 @@ function merge1CStock(products, oneCStocks) {
     if (stock1C) {
       product.price_1c = stock1C.price;
       product.cost_1c = stock1C.cost;
-      product.amount_1c = stock1C.amount;
       product.brand = stock1C.brand;
       product.group = stock1C.group;
       product.subgroup = stock1C.subgroup;
     } else {
       product.price_1c = null;
       product.cost_1c = null;
-      product.amount_1c = null;
       product.brand = '';
       product.group = '';
       product.subgroup = '';
@@ -52,48 +50,98 @@ async function calculateManagementData(daysCovered = 28) {
   let fboOrders = await ozon.getAllFboOrders(fromDate.toISOString(), toDate.toISOString());
   console.log(`Found ${fboOrders.length} FBO orders`);
 
-  // Flatten to products
+  // Flatten to products with cluster info
   const fboOrderedProducts = ozon.getFlattenedOrderedProducts(fboOrders);
   console.log(`Found ${fboOrderedProducts.length} FBO ordered products`);
 
-  // Aggregate by product (offer_id)
-  const productFboMap = {};
-  fboOrderedProducts.forEach(item => {
-    const offerId = item.offer_id;
-    if (!productFboMap[offerId]) {
-      productFboMap[offerId] = {
-        offer_id: offerId,
-        name: item.name,
-        fbo_count: 0,
-        stock_count: 0
-      };
-    }
-    productFboMap[offerId].fbo_count += item.quantity;
-  });
+  // Fetch cluster/warehouse mapping
+  const clustersAndWarehouses = await ozon.getClustersAndWarehouses();
+  const warehouseToClusterMap = ozon.createWarehouseToClusterMap(clustersAndWarehouses);
+
+  // Add manual mappings for warehouses not in API response
+  warehouseToClusterMap['МИНСК_МПСЦ'] = 'Беларусь';
+  warehouseToClusterMap['АСТАНА_РФЦ'] = 'Казахстан';
+
+  console.log(`Found ${clustersAndWarehouses.length} clusters`);
 
   // Fetch stocks
   const allStocks = await ozon.getAllStocks();
   console.log(`Found ${allStocks.length} stock entries`);
 
-  // Aggregate stocks by product (item_code is the same as offer_id)
-  const stockMap = {};
-  allStocks.forEach(item => {
-    const itemCode = item.item_code;
-    if (!stockMap[itemCode]) {
-      stockMap[itemCode] = 0;
+  // Aggregate stocks by product and cluster
+  const stocksByCluster = ozon.calculateStocksByCluster(allStocks, warehouseToClusterMap);
+
+  // Aggregate by product and cluster
+  const productClusterMap = {};
+
+  // Process orders
+  fboOrderedProducts.forEach(item => {
+    const offerId = item.offer_id;
+    const cluster = item.cluster_to || 'Unknown';
+
+    if (!productClusterMap[offerId]) {
+      productClusterMap[offerId] = {
+        offer_id: offerId,
+        name: item.name,
+        clusters: {}
+      };
     }
-    // Sum all stock amounts: free to sell + reserved + promised
-    const totalStock = (item.free_to_sell_amount || 0) + (item.reserved_amount || 0) + (item.promised_amount || 0);
-    stockMap[itemCode] += totalStock;
+
+    if (!productClusterMap[offerId].clusters[cluster]) {
+      productClusterMap[offerId].clusters[cluster] = {
+        cluster: cluster,
+        fbo_ordered_count: 0,
+        fbo_stock_count: 0
+      };
+    }
+
+    productClusterMap[offerId].clusters[cluster].fbo_ordered_count += item.quantity;
   });
 
-  // Merge stock data into products
-  Object.keys(productFboMap).forEach(offerId => {
-    productFboMap[offerId].stock_count = stockMap[offerId] || 0;
+  // Process stocks
+  Object.keys(stocksByCluster).forEach(itemCode => {
+    const stockData = stocksByCluster[itemCode];
+
+    if (!productClusterMap[itemCode]) {
+      productClusterMap[itemCode] = {
+        offer_id: itemCode,
+        name: '',
+        clusters: {}
+      };
+    }
+
+    Object.keys(stockData.clusters).forEach(cluster => {
+      if (!productClusterMap[itemCode].clusters[cluster]) {
+        productClusterMap[itemCode].clusters[cluster] = {
+          cluster: cluster,
+          fbo_ordered_count: 0,
+          fbo_stock_count: 0
+        };
+      }
+
+      const clusterStock = stockData.clusters[cluster];
+      const totalStock = (clusterStock.free_to_sell_amount || 0) +
+                        (clusterStock.reserved_amount || 0) +
+                        (clusterStock.promised_amount || 0);
+      productClusterMap[itemCode].clusters[cluster].fbo_stock_count = totalStock;
+    });
   });
 
-  const products = Object.values(productFboMap);
-  console.log(`Aggregated into ${products.length} unique products`);
+  // Flatten to products with clusters
+  const products = [];
+  Object.values(productClusterMap).forEach(product => {
+    Object.values(product.clusters).forEach(clusterData => {
+      products.push({
+        offer_id: product.offer_id,
+        name: product.name,
+        cluster: clusterData.cluster,
+        fbo_ordered_count: clusterData.fbo_ordered_count,
+        fbo_stock_count: clusterData.fbo_stock_count
+      });
+    });
+  });
+
+  console.log(`Aggregated into ${products.length} product-cluster combinations`);
 
   // Get all products for names
   const allProducts = await ozon.getAllProducts();
@@ -149,7 +197,7 @@ async function managementReport(daysCovered = 28) {
   console.log(`Created directory: reports/ozon/${folderName}/`);
 
   console.log('\nGenerating management hierarchy report...');
-  const buffer = await Excel.createManagementHierarchyReportBuffer(products);
+  const buffer = await Excel.createManagementHierarchyReportBuffer(products, daysCovered);
 
   const fname = path.join(outputDir, `ozon_management_${dateRange}.xlsx`);
   await fs.writeFile(fname, buffer);
@@ -157,7 +205,7 @@ async function managementReport(daysCovered = 28) {
 
   console.log('\n=== Report Summary ===');
   console.log(`Total products with FBO sales: ${products.length}`);
-  console.log(`Total FBO units sold: ${products.reduce((sum, p) => sum + p.fbo_count, 0)}`);
+  console.log(`Total FBO units sold: ${products.reduce((sum, p) => sum + p.fbo_ordered_count, 0)}`);
   console.log(`Products with 1C hierarchy: ${products.filter(p => p.brand).length}`);
 }
 
