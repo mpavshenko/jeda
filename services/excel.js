@@ -1464,6 +1464,10 @@ class Excel {
                 const daysRemaining = dailyFboValue > 0 ? stockValue / dailyFboValue : null;
 
                 const productRow = worksheet.getRow(rowIndex++);
+                productRow.getCell(1).value = cluster;
+                productRow.getCell(2).value = brand;
+                productRow.getCell(3).value = group;
+                productRow.getCell(4).value = subgroup;
                 productRow.getCell(5).value = product.offer_id;
                 productRow.getCell(6).value = product.name || '';
                 productRow.getCell(7).value = product.price_1c;
