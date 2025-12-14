@@ -185,14 +185,12 @@ async function managementReport(daysCovered = 28) {
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
-  const folderName = `${dateRange}_${hours}-${minutes}`;
 
-  const reportsBaseDir = path.join(process.cwd(), 'reports', 'wb');
-  const outputDir = path.join(reportsBaseDir, folderName);
+  const outputDir = path.join(process.cwd(), 'reports', 'wb');
 
   // Create reports directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/wb/${folderName}/`);
+  console.log(`Created directory: reports/wb/`);
 
   console.log('\nGenerating WB management hierarchy report...');
   const buffer = await Excel.createManagementHierarchyReportBuffer(products, daysCovered);

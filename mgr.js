@@ -121,8 +121,8 @@ async function calculateManagementData(daysCovered = 28) {
 
       const clusterStock = stockData.clusters[cluster];
       const totalStock = (clusterStock.free_to_sell_amount || 0) +
-                        (clusterStock.reserved_amount || 0) +
-                        (clusterStock.promised_amount || 0);
+        (clusterStock.reserved_amount || 0) +
+        (clusterStock.promised_amount || 0);
       productClusterMap[itemCode].clusters[cluster].fbo_stock_count = totalStock;
     });
   });
@@ -187,14 +187,12 @@ async function managementReport(daysCovered = 28) {
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
-  const folderName = `${dateRange}_${hours}-${minutes}`;
 
-  const reportsBaseDir = path.join(process.cwd(), 'reports', 'ozon');
-  const outputDir = path.join(reportsBaseDir, folderName);
+  const outputDir = path.join(process.cwd(), 'reports', 'ozon');
 
   // Create reports directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/ozon/${folderName}/`);
+  console.log(`Created directory: reports/ozon/`);
 
   console.log('\nGenerating management hierarchy report...');
   const buffer = await Excel.createManagementHierarchyReportBuffer(products, daysCovered);
