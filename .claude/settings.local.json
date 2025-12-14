@@ -4,7 +4,9 @@
       "WebFetch(domain:docs.ozon.ru)",
       "WebFetch(domain:dev.wildberries.ru)",
       "WebSearch",
-      "WebFetch(domain:openapi.wildberries.ru)"
+      "WebFetch(domain:openapi.wildberries.ru)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

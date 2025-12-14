@@ -399,6 +399,13 @@ function calculateInTransit(fulfillment, supplies) {
 function calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays) {
   fulfillment.forEach(product => {
     Object.values(product.clusters).forEach(cluster => {
+      // TODO
+      // If 1C stock is 2 or less, reserve for Yandex - don't supply to WB
+      // if (product.amount_1c !== null && product.amount_1c <= 2) {
+      //   cluster.supply_need = 0;
+      //   return;
+      // }
+
       const demandedStock = cluster.daily * stockCoverageDays - cluster.in_transit;
       const remainingStock = Math.max(0, cluster.stock - fulfillmentLeadTimeDays * cluster.daily);
       cluster.supply_need = Math.round(demandedStock - remainingStock);
@@ -453,12 +460,13 @@ async function calculateFulfillment(daysCovered = 28, stockCoverageDays = 28, fu
   const supplies = await wb.getInTransitSupplies();
   calculateInTransit(fulfillment, supplies);
 
-  calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays);
-
-  // 1C STOCK
+  // 1C STOCK (moved before supply calculation to check 1C stock)
   const oneCStocks = await oneC.getStock();
   console.log(`Found ${oneCStocks.length} products in 1C stock`);
   merge1CStock(fulfillment, oneCStocks);
+
+  // Calculate supply needs (now has access to amount_1c)
+  calculateSupplyNeeds(fulfillment, stockCoverageDays, fulfillmentLeadTimeDays);
 
   return {
     fulfillment,

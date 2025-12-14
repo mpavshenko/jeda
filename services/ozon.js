@@ -709,11 +709,11 @@ class Ozon {
   // Get all supply order IDs with specified states
   async getSupplyOrderIds() {
     const states = [
-      "ORDER_STATE_DATA_FILLING",
-      "ORDER_STATE_READY_TO_SUPPLY",
-      "ORDER_STATE_ACCEPTED_AT_SUPPLY_WAREHOUSE",
-      "ORDER_STATE_IN_TRANSIT",
-      "ORDER_STATE_ACCEPTANCE_AT_STORAGE_WAREHOUSE"
+      "DATA_FILLING",
+      "READY_TO_SUPPLY",
+      "ACCEPTED_AT_SUPPLY_WAREHOUSE",
+      "IN_TRANSIT",
+      "ACCEPTANCE_AT_STORAGE_WAREHOUSE"
     ];
 
     let allSupplyOrderIds = [];
@@ -724,25 +724,26 @@ class Ozon {
         filter: {
           states: states
         },
-        paging: {
-          limit: 100
-        }
+        last_id: null,
+        limit: 100,
+        sort_by: "ORDER_CREATION",
+        sort_dir: "DESC"
       };
 
       if (fromSupplyOrderId) {
-        body.paging.from_supply_order_id = fromSupplyOrderId;
+        body.last_id = fromSupplyOrderId;
       }
 
       try {
-        const response = await this.client.post('/v2/supply-order/list', body);
-        const supplyOrderIds = response.data.supply_order_id || [];
+        const response = await this.client.post('/v3/supply-order/list', body);
+        const supplyOrderIds = response.data.order_ids || [];
 
         if (supplyOrderIds.length === 0) {
           break;
         }
 
         allSupplyOrderIds.push(...supplyOrderIds);
-        fromSupplyOrderId = response.data.last_supply_order_id;
+        fromSupplyOrderId = response.data.last_id;
 
         if (!fromSupplyOrderId) {
           break;
@@ -756,7 +757,33 @@ class Ozon {
     return allSupplyOrderIds;
   }
 
-  // Get detailed info for supply orders in batches
+  /* Result example (API v4+):
+  [{
+    "order_id": 123456,
+    "order_number": "0070605-0001-1",
+    "created_date": "2024-01-15T10:00:00Z",
+    "state": "IN_TRANSIT",
+    "supplies": [
+      {
+        "supply_id": 789012,
+        "storage_warehouse": {
+          "warehouse_id": 22852653853000,
+          "arrival_date": "2024-01-20",
+          "address": "Moscow warehouse",
+          "name": "MOSCOW_RFC"
+        },
+        "bundle_id": "238525925853000",
+        "state": "IN_TRANSIT",
+        "is_crossdock": false
+      }
+    ]
+  }]
+  Fields used in code:
+  - order.order_number (was: supply_order_number)
+  - order.supplies (array)
+  - supply.storage_warehouse.warehouse_id (was: storage_warehouse_id)
+  - supply.bundle_id (now string, was number)
+  */
   async getSupplyOrdersInfo(supplyOrderIds) {
     const BATCH_SIZE = 50;
     let allOrders = [];
@@ -765,7 +792,7 @@ class Ozon {
       const batchIds = supplyOrderIds.slice(i, i + BATCH_SIZE);
 
       try {
-        const response = await this.client.post('/v2/supply-order/get', {
+        const response = await this.client.post('/v3/supply-order/get', {
           order_ids: batchIds
         });
 
@@ -831,9 +858,9 @@ class Ozon {
     // Extract only needed data: supplies with storage_warehouse_id and bundle_id
     return orders.map(order => ({
       supplies: (order.supplies || []).map(supply => ({
-        storage_warehouse_id: supply.storage_warehouse_id,
+        storage_warehouse_id: supply.storage_warehouse?.warehouse_id || supply.storage_warehouse_id, // Support both old and new format
         bundle_id: supply.bundle_id,
-        order: order.supply_order_number
+        order: order.order_number || order.supply_order_number // Support both old and new format
       }))
     }));
   }

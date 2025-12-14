@@ -27,17 +27,33 @@ This is a Node.js application for marketplace seller operations. The project pro
 - **services/1c.js**: 1C integration for stock data
 
 ### Tests
-Integration tests are located in the `tests/` folder:
-- **tests/test-1c-stock.js**: 1C stock API integration test
+Integration tests are organized by marketplace:
+
+**Shared tests** (`tests/`):
+- **test-1c-stock.js**: 1C stock API integration test
   - Tests connection to 1C service
   - Validates data structure
   - Shows stock statistics and sample data
   - Run with: `node tests/test-1c-stock.js`
-- **tests/test-wb-supplies.js**: WB supplies API integration test
+
+**Ozon tests** (`tests/ozon/`):
+- **test-supply-order-ids.js**: Ozon supply order IDs integration test
+  - Tests getSupplyOrderIds method
+  - Validates response structure and ID formats
+  - Shows statistics and sample data
+  - Run with: `node tests/ozon/test-supply-order-ids.js`
+- **test-supply-orders-info.js**: Ozon supply orders detailed info test
+  - Tests getSupplyOrdersInfo method with first 5 IDs
+  - Validates order structure and required fields
+  - Shows order states and sample data
+  - Run with: `node tests/ozon/test-supply-orders-info.js`
+
+**Wildberries tests** (`tests/wb/`):
+- **test-wb-supplies.js**: WB supplies API integration test
   - Tests WB supplies API (in-transit data)
   - Validates supply data aggregation
   - Shows warehouse mappings
-  - Run with: `node tests/test-wb-supplies.js`
+  - Run with: `node tests/wb/test-wb-supplies.js`
 
 ### Environment Variables
 - **Ozon**: `OZON_CLIENT_ID`, `OZON_API_KEY`, `OZON_BASE_URL`
