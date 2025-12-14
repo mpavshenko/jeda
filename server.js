@@ -9,6 +9,8 @@ const basicAuth = require('express-basic-auth');
 const { ozonConfig, wbConfig } = require('./config');
 const { fulfillmentReport } = require('./ffl');
 const { fulfillmentReport: wbFulfillmentReport } = require('./ffl-wb');
+const { managementReport } = require('./mgr');
+const { managementReport: wbManagementReport } = require('./mgr-wb');
 const { version } = require('./package.json');
 
 const app = express();
@@ -23,14 +25,23 @@ const auth = basicAuth({
   realm: 'Jeda Seller Reports'
 });
 
-// Schedule Ozon report generation
+// Schedule Ozon fulfillment report generation
 cron.schedule(ozonConfig.cronSchedule, async () => {
   console.log(`Running scheduled Ozon fulfillment report...`);
   try {
     await fulfillmentReport(28, 45);
-    console.log(`Ozon report generation completed successfully`);
+    console.log(`Ozon fulfillment report generation completed successfully`);
   } catch (error) {
-    console.error(`Ozon report generation failed:`, error.message || error);
+    console.error(`Ozon fulfillment report generation failed:`, error.message || error);
+  }
+
+  // Run management report after fulfillment report
+  console.log(`Running Ozon management report...`);
+  try {
+    await managementReport(28);
+    console.log(`Ozon management report generation completed successfully`);
+  } catch (error) {
+    console.error(`Ozon management report generation failed:`, error.message || error);
   }
 });
 
@@ -39,9 +50,18 @@ cron.schedule(wbConfig.cronSchedule, async () => {
   console.log(`Running scheduled WB fulfillment report...`);
   try {
     await wbFulfillmentReport(28, 45);
-    console.log(`WB report generation completed successfully`);
+    console.log(`WB fulfillment report generation completed successfully`);
   } catch (error) {
-    console.error(`WB report generation failed:`, error.message || error);
+    console.error(`WB fulfillment report generation failed:`, error.message || error);
+  }
+
+  // Run WB management report after fulfillment report
+  console.log(`Running WB management report...`);
+  try {
+    await wbManagementReport(28);
+    console.log(`WB management report generation completed successfully`);
+  } catch (error) {
+    console.error(`WB management report generation failed:`, error.message || error);
   }
 });
 
@@ -86,7 +106,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   const ozonCronDescription = cronstrue.toString(ozonConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
-  console.log(`Scheduled Ozon report: "${ozonConfig.cronSchedule}" => ${ozonCronDescription}`);
+  console.log(`Scheduled Ozon reports (fulfillment + management): "${ozonConfig.cronSchedule}" => ${ozonCronDescription}`);
   const wbCronDescription = cronstrue.toString(wbConfig.cronSchedule, { use24HourTimeFormat: true, verbose: true });
-  console.log(`Scheduled WB report: "${wbConfig.cronSchedule}" => ${wbCronDescription}`);
+  console.log(`Scheduled WB reports (fulfillment + management): "${wbConfig.cronSchedule}" => ${wbCronDescription}`);
 });

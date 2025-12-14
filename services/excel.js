@@ -19,6 +19,8 @@ class Excel {
     return filename;
   }
 
+  // ==================== OZON Excel Generation ====================
+
   static async createFulfillmentReportBuffer(ordersWithStocks) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Orders with Stocks');
@@ -1208,6 +1210,8 @@ class Excel {
     return await workbook.xlsx.writeBuffer();
   }
 
+  // ==================== WB & OZON Excel Generation ====================
+
   static async createManagementHierarchyReportBuffer(products, daysCovered = 28) {
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
@@ -1246,8 +1250,8 @@ class Excel {
       { header: 'Название', key: 'name', width: 45 },
       { header: 'Цена', key: 'price', width: 12 },
       { header: 'Себест.', key: 'cost', width: 12 },
-      { header: 'Остаток Ozon', key: 'stock_ozon', width: 12 },
-      { header: 'Остаток Ozon ₽', key: 'stock_ozon_value', width: 15 },
+      { header: 'Остаток FBO', key: 'stock_ozon', width: 12 },
+      { header: 'Остаток FBO ₽', key: 'stock_ozon_value', width: 15 },
       { header: 'Заказы FBO', key: 'fbo', width: 12 },
       { header: 'Заказы FBO ₽', key: 'fbo_value', width: 15 },
       { header: 'Дни остатка', key: 'days_remaining', width: 12 }
