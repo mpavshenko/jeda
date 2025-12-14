@@ -45,6 +45,13 @@ function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLe
       }
     */
     Object.values(product.clusters).forEach(x => {
+      // TODO
+      // If 1C stock is 2 or less, reserve for Yandex - don't supply to Ozon
+      // if (product.amount_1c !== null && product.amount_1c <= 2) {
+      //   x.supply = 0;
+      //   return;
+      // }
+
       const demandedStock = x.daily * stockCoverageDays - x.in_transit;
       const remainingStock = Math.max(0, x.stock - fulfillmentLeadTimeDays * x.daily);
       x.supply = Math.round(demandedStock - remainingStock);
@@ -90,7 +97,6 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
 
   // MERGE
   const ordersWithStocks = ozon.mergeOrdersWithStocks(orderedProductsByCluster, stocksByCluster, inTransitByCluster);
-  calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays);
 
   // GET ALL PRODUCTS FOR NAMES
   const allProducts = await ozon.getAllProducts();
@@ -107,10 +113,13 @@ async function calculateFulfillmentData(daysCovered = 28, stockCoverageDays = 28
     }
   });
 
-  // 1C STOCK
+  // 1C STOCK (moved before supply calculation to check 1C stock)
   const oneCStocks = await oneC.getStock();
   console.log(`Found ${oneCStocks.length} products in 1C stock`);
   merge1CStock(ordersWithStocks, oneCStocks);
+
+  // Calculate supply needs (now has access to amount_1c)
+  calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays);
 
   // Print API call count
   console.log(`\nTotal Ozon API calls: ${ozon.getApiCallCount()}`);
@@ -175,7 +184,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
 async function main() {
   console.log("Starting fulfillment calculation script...");
 
-  await fulfillmentReport();
+  await fulfillmentReport(28, 45);
 }
 
 // Only run main if this file is executed directly
