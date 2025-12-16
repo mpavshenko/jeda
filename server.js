@@ -29,7 +29,7 @@ const auth = basicAuth({
 cron.schedule(ozonConfig.cronSchedule, async () => {
   console.log(`Running scheduled Ozon fulfillment report...`);
   try {
-    await fulfillmentReport(28, 45);
+    await fulfillmentReport(28, 28);
     console.log(`Ozon fulfillment report generation completed successfully`);
   } catch (error) {
     console.error(`Ozon fulfillment report generation failed:`, error.message || error);
@@ -49,7 +49,7 @@ cron.schedule(ozonConfig.cronSchedule, async () => {
 cron.schedule(wbConfig.cronSchedule, async () => {
   console.log(`Running scheduled WB fulfillment report...`);
   try {
-    await wbFulfillmentReport(28, 45);
+    await wbFulfillmentReport(28, 28);
     console.log(`WB fulfillment report generation completed successfully`);
   } catch (error) {
     console.error(`WB fulfillment report generation failed:`, error.message || error);
