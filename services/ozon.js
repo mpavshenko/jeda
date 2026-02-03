@@ -30,16 +30,26 @@ class Ozon {
       return axiosConfig;
     });
 
-    // error handling
+    // error handling with retry on 429
     this.client.interceptors.response.use(
       response => response,
-      error => {
+      async error => {
+        const config = error.config;
+        if (error.response?.status === 429 && (config._retryCount || 0) < ozonConfig.maxRetries) {
+          config._retryCount = (config._retryCount || 0) + 1;
+          const delay = ozonConfig.requestDelay * Math.pow(2, config._retryCount);
+          console.warn(`Rate limited (429). Retry ${config._retryCount}/${ozonConfig.maxRetries} after ${delay}ms... [${config.url}]`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          this.lastRequestTime = Date.now();
+          return this.client(config);
+        }
+
         if (error.response) {
           console.error('OZON API Error:', {
             status: error.response.status,
             statusText: error.response.statusText,
             data: error.response.data,
-            url: error.config?.url
+            url: config?.url
           });
         } else {
           console.error('OZON API Error:', error.message);
