@@ -6,8 +6,8 @@ const ozonConfig = {
   apiKey: process.env.OZON_API_KEY,
 
   // Rate limiting
-  requestDelay: 3000, // ms between requests
-  maxRetries: 3,
+  requestDelay: 2000, // ms between requests
+  maxRetries: 5,
 
   // Business logic constants
   FBO_STOCK_SUPPLY_DAYS: 28,

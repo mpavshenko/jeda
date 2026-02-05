@@ -3,7 +3,7 @@ require('dotenv').config();
 const WB = require('./services/wb');
 const Excel = require('./services/excel');
 const OneC = require('./services/1c');
-const { getDateRangeFromYesterday, formatDate } = require('./utils/dates');
+const { getDateRangeFromYesterday, formatDate, getMonStr } = require('./utils/dates');
 
 const wb = new WB();
 const oneC = new OneC();
@@ -184,18 +184,19 @@ async function managementReport(daysCovered = 28) {
   const now = new Date();
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
-  const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
+  const mon = getMonStr(now);
+  const reportParamsStr = `${formatDate(now)}_${hours}h${minutes}m_${daysCovered}days`;
 
-  const outputDir = path.join(process.cwd(), 'reports', 'wb');
+  const outputDir = path.join(process.cwd(), 'reports', 'wb', mon);
 
   // Create reports directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/wb/`);
+  console.log(`Created directory: ${outputDir}`);
 
   console.log('\nGenerating WB management hierarchy report...');
   const buffer = await Excel.createManagementHierarchyReportBuffer(products, daysCovered);
 
-  const fname = path.join(outputDir, `wb_management_${dateRange}.xlsx`);
+  const fname = path.join(outputDir, `wb_management_${reportParamsStr}.xlsx`);
   await fs.writeFile(fname, buffer);
   console.log(`Saved: ${fname}`);
 

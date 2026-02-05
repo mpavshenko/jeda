@@ -1,3 +1,5 @@
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
 function getDateRangeFromYesterday(days) {
   const toDate = new Date();
   toDate.setHours(23, 59, 59, 999);
@@ -10,11 +12,14 @@ function getDateRangeFromYesterday(days) {
   return { fromDate, toDate };
 }
 
+function getMonStr(date) {
+  return MONTHS[date.getMonth()];
+}
+
 function formatDate(date) {
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const day = date.getDate().toString().padStart(2, '0');
-  const month = months[date.getMonth()];
-  return `${month}-${day}`;
+  const month = getMonStr(date);
+  return `${day}${month}`;
 }
 
 // Format date to RFC3339 (YYYY-MM-DDTHH:MM:SS)
@@ -30,6 +35,7 @@ function formatRFC3339(date) {
 
 module.exports = {
   getDateRangeFromYesterday,
+  getMonStr,
   formatDate,
   formatRFC3339
 };

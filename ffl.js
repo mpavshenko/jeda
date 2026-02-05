@@ -3,7 +3,7 @@ require('dotenv').config();
 const Ozon = require('./services/ozon');
 const Excel = require('./services/excel');
 const OneC = require('./services/1c');
-const { getDateRangeFromYesterday, formatDate } = require('./utils/dates');
+const { getDateRangeFromYesterday, formatDate, getMonStr } = require('./utils/dates');
 
 const ozon = new Ozon();
 const oneC = new OneC();
@@ -146,20 +146,21 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   const now = new Date();
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
-  const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
-  const folderName = `${dateRange}_${hours}-${minutes}`;
+  const mon = getMonStr(now);
+  const reportParamsStr = `${formatDate(now)}_${daysCovered}days`;
+  const reportTimeStr = `${formatDate(now)}_${hours}h${minutes}m`;
 
-  const reportsBaseDir = path.join(process.cwd(), 'reports', 'ozon');
-  const outputDir = path.join(reportsBaseDir, folderName);
+  const reportsBaseDir = path.join(process.cwd(), 'reports', 'ozon', mon);
+  const outputDir = path.join(reportsBaseDir, reportTimeStr);
 
   // Create reports base directory and date-specific directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/ozon/${folderName}/`);
+  console.log(`Created directory: ${outputDir}`);
 
   console.log('\nGenerating main supply report...');
   const mainBuffer = await Excel.createFulfillmentReportBuffer(ordersWithStocks);
 
-  const fname = path.join(outputDir, `ozon_fulfillment_${dateRange}.xlsx`);
+  const fname = path.join(outputDir, `ozon_fulfillment_${reportParamsStr}.xlsx`);
   await fs.writeFile(fname, mainBuffer);
   console.log(`Saved: ${fname}`);
 
@@ -167,7 +168,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   for (const clusterName of clusterNames) {
     const clusterBuffer = await Excel.createClusterFulfillmentReportBuffer(clusterName, ordersWithStocks);
     if (clusterBuffer) {
-      const fname = path.join(outputDir, `ozon_fulfillment_${clusterName}_${dateRange}.xlsx`);
+      const fname = path.join(outputDir, `ozon_fulfillment_${clusterName}_${reportParamsStr}.xlsx`);
       await fs.writeFile(fname, clusterBuffer);
       console.log(`Saved: ${fname}`);
     }
@@ -175,8 +176,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
 
   console.log('\nGenerating cost summary report...');
   const costBuffer = await Excel.createCostSummaryReportBuffer(ordersWithStocks);
-  const generationDate = `${formatDate(toDate)}_${hours}-${minutes}`;
-  const costFilename = path.join(outputDir, `ozon_cost_summary_${generationDate}.xlsx`);
+  const costFilename = path.join(outputDir, `ozon_cost_summary_${reportTimeStr}.xlsx`);
   await fs.writeFile(costFilename, costBuffer);
   console.log(`Saved: ${costFilename}`);
 }

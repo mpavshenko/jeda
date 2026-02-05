@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const WB = require('./services/wb');
 const OneC = require('./services/1c');
-const { getDateRangeFromYesterday, formatDate } = require('./utils/dates');
+const { getDateRangeFromYesterday, formatDate, getMonStr } = require('./utils/dates');
 const { wbConfig } = require('./config');
 const wb = new WB();
 const oneC = new OneC();
@@ -488,20 +488,21 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   const now = new Date();
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
-  const dateRange = `${formatDate(fromDate)}_${formatDate(toDate)}`;
-  const folderName = `WB_${dateRange}_${hours}-${minutes}`;
+  const mon = getMonStr(now);
+  const reportParamsStr = `${formatDate(now)}_${daysCovered}days`;
+  const reportTimeStr = `${formatDate(now)}_${hours}h${minutes}m`;
 
-  const reportsBaseDir = path.join(process.cwd(), 'reports', 'wb');
-  const outputDir = path.join(reportsBaseDir, folderName);
+  const reportsBaseDir = path.join(process.cwd(), 'reports', 'wb', mon);
+  const outputDir = path.join(reportsBaseDir, reportTimeStr);
 
   // Create reports base directory and date-specific directory
   await fs.mkdir(outputDir, { recursive: true });
-  console.log(`Created directory: reports/wb/${folderName}/`);
+  console.log(`Created directory: ${outputDir}`);
 
   console.log('\nGenerating main WB supply report...');
   const mainBuffer = await Excel.createWbFulfillmentReportBuffer(fulfillment);
 
-  const fname = path.join(outputDir, `wb_fulfillment_${dateRange}.xlsx`);
+  const fname = path.join(outputDir, `wb_fulfillment_${reportParamsStr}.xlsx`);
   await fs.writeFile(fname, mainBuffer);
   console.log(`Saved: ${fname}`);
 
@@ -509,7 +510,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
   for (const clusterName of CLUSTER_NAMES) {
     const clusterBuffer = await Excel.createWbClusterFulfillmentReportBuffer(clusterName, fulfillment);
     if (clusterBuffer) {
-      const fname = path.join(outputDir, `wb_fulfillment_${clusterName}_${dateRange}.xlsx`);
+      const fname = path.join(outputDir, `wb_fulfillment_${clusterName}_${reportParamsStr}.xlsx`);
       await fs.writeFile(fname, clusterBuffer);
       console.log(`Saved: ${fname}`);
     }
@@ -517,8 +518,7 @@ async function fulfillmentReport(daysCovered = 28, stockCoverageDays = 28, fulfi
 
   console.log('\nGenerating WB cost summary report...');
   const costBuffer = await Excel.createWbCostSummaryReportBuffer(fulfillment);
-  const generationDate = `${formatDate(toDate)}_${hours}-${minutes}`;
-  const costFilename = path.join(outputDir, `wb_cost_summary_${generationDate}.xlsx`);
+  const costFilename = path.join(outputDir, `wb_cost_summary_${reportTimeStr}.xlsx`);
   await fs.writeFile(costFilename, costBuffer);
   console.log(`Saved: ${costFilename}`);
 }
