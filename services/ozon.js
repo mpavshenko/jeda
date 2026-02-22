@@ -59,6 +59,29 @@ class Ozon {
     );
   }
 
+  /*
+  Result example:
+  [
+    {
+      "product_id": 690217218,
+      "offer_id": "42E581",
+      "has_fbo_stocks": false,
+      "has_fbs_stocks": false,
+      "archived": false,
+      "is_discounted": false,
+      "quants": []
+    },
+    {
+      "product_id": 692706089,
+      "offer_id": "97-536",
+      "has_fbo_stocks": false,
+      "has_fbs_stocks": false,
+      "archived": false,
+      "is_discounted": false,
+      "quants": []
+    },...
+  ]
+  */
   async getProducts(limit = 100, lastId = '') {
     try {
       const response = await this.client.post('/v3/product/list', {
@@ -91,6 +114,22 @@ class Ozon {
     }));
   }
 
+  /*
+  Result example:
+  [
+    {
+      "product_id": 690217218,
+      "offer_id": "42E581",
+      "name": "Пистолет клеевой электрический, 8 мм, 10 Вт Top Tools 42E581",
+      "sku": 1257270294
+    },
+    {
+      "product_id": 692706089,
+      "offer_id": "97-536",
+      "name": "Наколенники защитные NEO Tools 97-536",
+      "sku": 1259481632
+    },...]
+  */
   async getAllProducts() {
     const all = [];
     let lastId = '';
@@ -127,6 +166,151 @@ class Ozon {
     return all;
   }
 
+  /*
+  Result example:
+  {
+  "items": [
+    {
+      "acquiring": 3.36,
+      "offer_id": "42E581",
+      "product_id": 690217218,
+      "volume_weight": 0.2,
+      "commissions": {
+        "fbo_deliv_to_customer_amount": 25,
+        "fbo_direct_flow_trans_max_amount": 115.93,
+        "fbo_direct_flow_trans_min_amount": 56.94,
+        "fbo_return_flow_amount": 56.94,
+        "fbs_deliv_to_customer_amount": 25,
+        "fbs_direct_flow_trans_min_amount": 99.64,
+        "fbs_direct_flow_trans_max_amount": 99.64,
+        "fbs_first_mile_max_amount": 20,
+        "fbs_first_mile_min_amount": 10,
+        "fbs_return_flow_amount": 99.64,
+        "sales_percent_fbo": 38,
+        "sales_percent_fbs": 40,
+        "sales_percent_rfbs": 38,
+        "sales_percent_fbp": 38
+      },
+      "marketing_actions": {
+        "current_period_from": null,
+        "current_period_to": null,
+        "actions": [
+          {
+            "title": "Новогодний максимальный бустинг: усиление",
+            "value": 336,
+            "date_from": "2025-12-07T21:00:00Z",
+            "date_to": "2026-02-25T20:59:59Z"
+          }
+        ],
+        "ozon_actions_exist": false
+      },
+      "price": {
+        "auto_action_enabled": true,
+        "currency_code": "RUB",
+        "marketing_seller_price": 336,
+        "min_price": 212,
+        "old_price": 935,
+        "price": 420,
+        "retail_price": 0,
+        "vat": 0.22,
+        "auto_add_to_ozon_actions_list_enabled": false,
+        "net_price": 0
+      },
+      "price_indexes": {
+        "external_index_data": {
+          "min_price": 0,
+          "min_price_currency": "RUB",
+          "price_index_value": 0
+        },
+        "ozon_index_data": {
+          "min_price": 0,
+          "min_price_currency": "RUB",
+          "price_index_value": 0
+        },
+        "color_index": "WITHOUT_INDEX",
+        "self_marketplaces_index_data": {
+          "min_price": 0,
+          "min_price_currency": "RUB",
+          "price_index_value": 0
+        }
+      }
+    },...]
+  */
+
+  async getProductPrices(productIds, lastId = '') {
+    try {
+      const body = {
+        filter: {
+          product_id: productIds,
+        },
+        last_id: lastId,
+        limit: 1000
+      };
+
+      const response = await this.client.post('/v5/product/info/prices', body);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching product info prices:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  /*
+  Result example:
+  
+{
+  "result": [
+    {
+      "id": 690217218,
+      "barcode": "5902062130679",
+      "name": "Пистолет клеевой электрический, 8 мм, 10 Вт Top Tools 42E581",
+      "offer_id": "42E581",
+      "height": 58,
+      "depth": 192,
+      "width": 110,
+      "dimension_unit": "mm",
+      "weight": 138,
+      "weight_unit": "g",
+      "description_category_id": 200001425,
+      "type_id": 95575,
+      "primary_image": "https://cdn1.ozone.ru/s3/multimedia-u/6813424146.jpg",
+      "model_info": {
+        "model_id": 285814011,
+        "count": 1
+      },
+      "images": [
+        "https://cdn1.ozone.ru/s3/multimedia-1-j/6953754115.jpg",
+        "https://cdn1.ozone.ru/s3/multimedia-v/6813424147.jpg",
+        "https://cdn1.ozone.ru/s3/multimedia-1-k/6973116752.jpg"
+      ],
+      "pdf_list": [],
+      "attributes": [
+        {
+          "id": 10096,
+          "complex_id": 0,
+          "values": [
+            {
+              "dictionary_value_id": 61574,
+              "value": "черный"
+            }
+          ]
+        }, ...
+      ],
+      "complex_attributes": [],
+      "color_image": "",
+      "sku": 1257270294,
+      "barcodes": [
+        "5902062130679"
+      ],
+      "attributes_with_defaults": [
+        10100,
+        11794,
+        ...
+      ]
+    }, ...
+    ]
+  }
+  */
   async getProductDetails(productIds, offerId = null) {
     try {
       const body = {
