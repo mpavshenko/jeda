@@ -14,25 +14,31 @@ const ozonConfig = {
   FBO_SAFETY_STOCK_DAYS: 5,
   DAYS_COVERED: 30, // Default period for sales analysis
 
-  // Delivery days by cluster
-  deliveryDays: {
-    "Москва, МО и Дальние регионы": 10,
-    "Санкт-Петербург и СЗО": 7,
-    "Урал": 10,
-    "Дальний Восток": 30,
-    "Казань": 15,
-    "Уфа": 7,
-    "Самара": 7,
-    "Красноярск": 50,
-    "Воронеж": 7,
-    "Калининград": 10,
-    "Тюмень": 10,
-    "Кавказ": 7,
-    "Ярославль": 16,
-    "Сибирь": 10,
-    "Юг": 7,
-    "Саратов": 10
+  // Per-cluster delivery days (overrides default fulfillmentLeadTimeDays)
+  clusterDeliveryDays: {
+    "Дальний Восток": 60,
+    "Новосибирск": 30
   },
+
+  // Cluster display order
+  clusterOrder: [
+    "Москва, МО и Дальние регионы",
+    "Санкт-Петербург и СЗО",
+    "Урал",
+    "Дальний Восток",
+    "Казань",
+    "Уфа",
+    "Самара",
+    "Красноярск",
+    "Воронеж",
+    "Калининград",
+    "Тюмень",
+    "Кавказ",
+    "Ярославль",
+    "Сибирь",
+    "Юг",
+    "Саратов"
+  ],
 
   // Cron schedule for report generation
   cronSchedule: '30 5 * * *'  // Daily at 00:05

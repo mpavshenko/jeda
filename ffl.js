@@ -3,6 +3,7 @@ require('dotenv').config();
 const Ozon = require('./services/ozon');
 const Excel = require('./services/excel');
 const OneC = require('./services/1c');
+const { ozonConfig } = require('./config');
 const { getDateRangeFromYesterday, formatDate, getMonStr } = require('./utils/dates');
 
 const ozon = new Ozon();
@@ -32,7 +33,7 @@ function merge1CStock(ordersWithStocks, oneCStocks) {
   });
 }
 
-function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLeadTimeDays) {
+function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, defaultFulfillmentLeadTimeDays) {
   ordersWithStocks.forEach(product => {
     /*
       {
@@ -44,7 +45,8 @@ function calculateSupplyNeeds(ordersWithStocks, stockCoverageDays, fulfillmentLe
         "in_transit": 0
       }
     */
-    Object.values(product.clusters).forEach(x => {
+    Object.entries(product.clusters).forEach(([clusterName, x]) => {
+      const fulfillmentLeadTimeDays = ozonConfig.clusterDeliveryDays[clusterName] ?? defaultFulfillmentLeadTimeDays;
       // TODO
       // If 1C stock is 2 or less, reserve for Yandex - don't supply to Ozon
       // if (product.amount_1c !== null && product.amount_1c <= 2) {

@@ -2,8 +2,7 @@ const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const { ozonConfig, wbConfig } = require('../config');
 
-// Cluster order from config.js deliveryDays
-const CLUSTER_ORDER = Object.keys(ozonConfig.deliveryDays);
+const CLUSTER_ORDER = ozonConfig.clusterOrder;
 
 // WB Cluster order from config.js
 const WB_CLUSTER_ORDER = Object.keys(wbConfig.clusters);
@@ -50,7 +49,9 @@ class Excel {
     // Level 1: Product info + 1C + cluster names (each spanning 6 columns)
     const headerRow1 = ['Товар', '', '1C', ''];
     clusterNames.forEach(cluster => {
-      headerRow1.push(cluster, '', '', '', '', ''); // Cluster spans 6 columns
+      const days = ozonConfig.clusterDeliveryDays[cluster];
+      const label = days ? `${cluster} (${days}д)` : cluster;
+      headerRow1.push(label, '', '', '', '', ''); // Cluster spans 6 columns
     });
     worksheet.addRow(headerRow1);
 
@@ -90,7 +91,8 @@ class Excel {
     clusterNames.forEach((cluster, clusterIndex) => {
       worksheet.mergeCells(1, colIndex, 1, colIndex + 5); // Merge 6 columns
       const cell = worksheet.getCell(1, colIndex);
-      cell.value = cluster;
+      const days = ozonConfig.clusterDeliveryDays[cluster];
+      cell.value = days ? `${cluster} (${days}д)` : cluster;
       cell.alignment = { horizontal: 'center' };
       cell.font = { bold: true };
 
