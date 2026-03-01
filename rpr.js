@@ -61,25 +61,25 @@ function calcVolumeInLitres({ height, depth, width }) {
 
 /*
 spec:
-•	до 1 литра включительно — 80 ₽;
-•	от 1,001 до 2 литров включительно — 98 ₽;
-•	от 2,001 до 3 литров включительно — 116 ₽;
-•	до 190 литров включительно — 23 ₽ за каждый дополнительный литр свыше 3 л;
-•	от 190,001 до 1000 литров включительно — 6 ₽ за каждый дополнительный литр свыше 190 литров;
-•	свыше 1000 литров — фиксированная стоимость 9277 ₽.
+до 1 литра включительно — 46,77 ₽;
+от 1,001 до 2 литров включительно — 56,94 ₽;
+от 2,001 до 3 литров включительно — 67,11 ₽;
+от 3,001 до 190 литров включительно — 15,25 ₽ за каждый дополнительный литр свыше 3 литров;
+от 190,001 до 1000 литров включительно — 6,1 ₽ за каждый дополнительный литр свыше 190 литров;
+свыше 1000 литров — фиксированная стоимость 7859,86 ₽
 
 С учетом текущего среднего времени доставки logistics_fbo надо умножить на 1,16 + и прибавить «доставку до места выдачи» 25 рублей.
 */
 function calcFboLogisticPrice(volumeInLitres) {
   if (!volumeInLitres) return 0;
   let base;
-  if (volumeInLitres <= 1) base = 80;
-  else if (volumeInLitres <= 2) base = 98;
-  else if (volumeInLitres <= 3) base = 116;
-  else if (volumeInLitres <= 190) base = 116 + Math.ceil(volumeInLitres - 3) * 23;
-  else if (volumeInLitres <= 1000) base = 116 + 187 * 23 + Math.ceil(volumeInLitres - 190) * 6;
-  else base = 9277;
-  return base * 1.16 + 25;
+  if (volumeInLitres <= 1) base = 46.77;
+  else if (volumeInLitres <= 2) base = 56.94;
+  else if (volumeInLitres <= 3) base = 67.11;
+  else if (volumeInLitres <= 190) base = 67.11 + (volumeInLitres - 3) * 15.25;
+  else if (volumeInLitres <= 1000) base = 67.11 + 187 * 15.25 + (volumeInLitres - 190) * 6.1;
+  else base = 7859.86;
+  return base * 1.32;
 }
 
 const COLUMNS = [
@@ -154,7 +154,7 @@ async function main() {
   const { result } = await ozon.getProducts(1000);
   const products = result.items.map(p => ({ product_id: p.product_id, offer_id: p.offer_id }));
   console.log(`Got ${products.length} of ${result.total} products\n`);
-  // fs.writeFileSync('products.json', JSON.stringify(products, null, 2));
+  fs.writeFileSync('products.json', JSON.stringify(products, null, 2));
   const ids = products.map(p => p.product_id);
 
   // Build products map by product_id for enrichment
@@ -177,7 +177,7 @@ async function main() {
   // Step 3: Enrich with sales_percent_fbo from prices API
   console.log("--- Step 3: Enriching with commissions ---");
   const prices = await ozon.getProductPrices(ids);
-  // fs.writeFileSync('prices.json', JSON.stringify(prices, null, 2));
+  fs.writeFileSync('prices.json', JSON.stringify(prices, null, 2));
   prices.items.forEach(pr => {
     const p = productsMap[pr.product_id];
     if (p) {
