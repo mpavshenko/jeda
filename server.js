@@ -53,9 +53,11 @@ cron.schedule(wbConfig.cronSchedule, async () => {
   console.log(`Running scheduled WB fulfillment report...`);
   try {
     // Feb 10th:
-    // 1. Горизонт планирования (на сколько везём) с 28 дней до 14 дней 
+    // 1. Горизонт планирования (на сколько везём) с 28 дней до 14 дней
     // 2. Срок доставки с 14 дней до 10 дней
-    await wbFulfillmentReport(28, 14, 10);
+    // Apr 1st:
+    // вернуть горизонт планирования с 14 на 28 дней
+    await wbFulfillmentReport(28, 28, 10);
     console.log(`WB fulfillment report generation completed successfully`);
   } catch (error) {
     console.error(`WB fulfillment report generation failed:`, error.message || error);
