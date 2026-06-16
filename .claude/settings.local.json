@@ -6,7 +6,12 @@
       "WebSearch",
       "WebFetch(domain:openapi.wildberries.ru)",
       "Bash(mkdir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(node -e \"require\\('./services/excel.js'\\)\")",
+      "Bash(node -e \"require\\('./ffl.js'\\)\")",
+      "Bash(node -e \"require\\('./mgr.js'\\)\")",
+      "Bash(node *)",
+      "Bash(echo \"exit: $?\")"
     ],
     "deny": [],
     "ask": []

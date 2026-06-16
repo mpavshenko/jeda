@@ -258,7 +258,8 @@ class Ozon {
             status: order.status,
             products: order.products,
             cluster_from: order.financial_data?.cluster_from || null,
-            cluster_to: order.financial_data?.cluster_to || null
+            cluster_to: order.financial_data?.cluster_to || null,
+            in_process_at: order.in_process_at || null
           }));
 
           allOrders.push(...transformedOrders);

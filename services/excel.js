@@ -1525,6 +1525,152 @@ class Excel {
 
     return await workbook.xlsx.writeBuffer();
   }
+
+  // ==================== Ozon Weekly Sales Report ====================
+
+  static async createOzonWeeklySalesReportBuffer(data) {
+    const { weeks, items } = data;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Отчёт');
+
+    const PRODUCT_COLS = 6;
+    const WEEK_COLS = 10;
+    const totalCols = PRODUCT_COLS + weeks.length * WEEK_COLS;
+
+    // Row 1: top-level merged headers (product section + per-week labels)
+    const row1Placeholder = new Array(totalCols).fill('');
+    worksheet.addRow(row1Placeholder);
+    worksheet.getRow(1).height = 30;
+
+    // Row 2: sub-headers
+    const subHeaders = ['Артикул Родитель', 'Наименование родитель', 'Подгруппа', 'Бренд', 'Группа', 'Наименование'];
+    const weekSubHeaders = [
+      'Сумма заказов', 'Количество заказов шт', 'Выкупы сумма', 'Выкупы кол-во',
+      '% сумма', '% выкупы', 'Остаток склад Смайл', 'Остаток FBO',
+      'Средняя цена недели', 'Средняя цена недели %'
+    ];
+    const row2Data = [...subHeaders];
+    weeks.forEach(() => row2Data.push(...weekSubHeaders));
+    worksheet.addRow(row2Data);
+    worksheet.getRow(2).height = 40;
+
+    // Style row 1: product section header
+    worksheet.mergeCells(1, 1, 1, PRODUCT_COLS);
+    const prodCell = worksheet.getCell(1, 1);
+    prodCell.value = 'Товар';
+    prodCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    prodCell.font = { bold: true };
+    prodCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDDDDD' } };
+
+    // Style row 1: per-week merged headers
+    weeks.forEach((week, i) => {
+      const c1 = PRODUCT_COLS + 1 + i * WEEK_COLS;
+      const c2 = c1 + WEEK_COLS - 1;
+      worksheet.mergeCells(1, c1, 1, c2);
+      const cell = worksheet.getCell(1, c1);
+      cell.value = week.label;
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern', pattern: 'solid',
+        fgColor: { argb: i % 2 === 0 ? 'FFFFF2CC' : 'FFE8F5E8' }
+      };
+    });
+
+    // Style row 2: sub-headers
+    const row2 = worksheet.getRow(2);
+    row2.font = { bold: true };
+    row2.eachCell((cell, col) => {
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      if (col <= PRODUCT_COLS) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD0D0D0' } };
+      } else {
+        const weekIndex = Math.floor((col - PRODUCT_COLS - 1) / WEEK_COLS);
+        cell.fill = {
+          type: 'pattern', pattern: 'solid',
+          fgColor: { argb: weekIndex % 2 === 0 ? 'FFFFF8DC' : 'FFF0FFF0' }
+        };
+      }
+    });
+
+    // Data rows
+    items.forEach((item, rowIdx) => {
+      const rowValues = [
+        item.parent_article,
+        item.parent_name,
+        item.subgroup,
+        item.brand,
+        item.group,
+        item.name
+      ];
+
+      item.weeks.forEach(w => {
+        rowValues.push(
+          w.order_amount || null,
+          w.order_qty || null,
+          w.buyout_amount || null,
+          w.buyout_qty || null,
+          w.order_amount_pct,
+          w.buyout_amount_pct,
+          w.smile_stock || null,
+          w.fbo_stock || null,
+          w.avg_week_price,
+          w.avg_week_price_pct
+        );
+      });
+
+      const dataRow = worksheet.addRow(rowValues);
+
+      // Alternate row background
+      const rowBg = rowIdx % 2 === 0 ? 'FFFFFFFF' : 'FFF7F7F7';
+      dataRow.eachCell({ includeEmpty: true }, cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+      });
+
+      // Number formats for week columns
+      item.weeks.forEach((w, i) => {
+        const base = PRODUCT_COLS + 1 + i * WEEK_COLS;
+        dataRow.getCell(base + 0).numFmt = '#,##0';   // Сумма заказов
+        dataRow.getCell(base + 1).numFmt = '#,##0';   // Количество заказов шт
+        dataRow.getCell(base + 2).numFmt = '#,##0';   // Выкупы сумма
+        dataRow.getCell(base + 3).numFmt = '#,##0';   // Выкупы кол-во
+        dataRow.getCell(base + 4).numFmt = '0%';      // % сумма
+        dataRow.getCell(base + 5).numFmt = '0%';      // % выкупы
+        dataRow.getCell(base + 6).numFmt = '#,##0';   // Остаток Смайл
+        dataRow.getCell(base + 7).numFmt = '#,##0';   // Остаток FBO
+        dataRow.getCell(base + 8).numFmt = '#,##0';   // Средняя цена
+        dataRow.getCell(base + 9).numFmt = '0%';      // Средняя цена %
+      });
+    });
+
+    // Column widths
+    worksheet.getColumn(1).width = 15;  // Артикул Родитель
+    worksheet.getColumn(2).width = 30;  // Наименование родитель
+    worksheet.getColumn(3).width = 20;  // Подгруппа
+    worksheet.getColumn(4).width = 12;  // Бренд
+    worksheet.getColumn(5).width = 25;  // Группа
+    worksheet.getColumn(6).width = 35;  // Наименование
+    for (let c = PRODUCT_COLS + 1; c <= totalCols; c++) {
+      worksheet.getColumn(c).width = 11;
+    }
+
+    // Freeze first 2 header rows and first 6 product columns
+    worksheet.views = [{ state: 'frozen', xSplit: PRODUCT_COLS, ySplit: 2 }];
+
+    // Autofilter on sub-header row
+    worksheet.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: 2, column: totalCols }
+    };
+
+    return await workbook.xlsx.writeBuffer();
+  }
 }
 
 module.exports = Excel;

@@ -1,6 +1,88 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { formatRFC3339 } = require('../utils/dates');
 const { wbConfig } = require('../config');
+
+const LOG_FILE = path.join(__dirname, '..', 'wb-debug.log');
+
+function wbLog(entry) {
+  fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + '\n');
+}
+
+function maskHeaders(headers = {}) {
+  const result = { ...headers };
+  for (const key of Object.keys(result)) {
+    if (key.toLowerCase() === 'authorization') result[key] = '***redacted***';
+  }
+  return result;
+}
+
+function buildUrl(config) {
+  try {
+    const url = new URL(config.url, config.baseURL);
+    if (config.params) {
+      Object.entries(config.params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+    }
+    return url.toString();
+  } catch {
+    return `${config.baseURL}${config.url}`;
+  }
+}
+
+function attachLogInterceptors(instance, clientName) {
+  instance.interceptors.request.use(config => {
+    config._wbClient = clientName;
+    config._wbStart = Date.now();
+    wbLog({
+      type: 'request',
+      timestamp: new Date().toISOString(),
+      client: clientName,
+      method: config.method?.toUpperCase(),
+      url: buildUrl(config),
+      headers: maskHeaders(config.headers),
+      body: config.method === 'get' ? (config.params || null) : (config.data || null),
+    });
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    response => {
+      wbLog({
+        type: 'response',
+        timestamp: new Date().toISOString(),
+        client: response.config._wbClient,
+        method: response.config.method?.toUpperCase(),
+        url: buildUrl(response.config),
+        durationMs: Date.now() - response.config._wbStart,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        body: response.data,
+      });
+      return response;
+    },
+    error => {
+      if (error.response) {
+        wbLog({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          client: error.config?._wbClient,
+          method: error.config?.method?.toUpperCase(),
+          url: buildUrl(error.config || {}),
+          durationMs: Date.now() - (error.config?._wbStart || 0),
+          status: error.response.status,
+          statusText: error.response.statusText,
+          requestHeaders: maskHeaders(error.config?.headers),
+          requestBody: error.config?.method === 'get' ? (error.config?.params || null) : (error.config?.data || null),
+          responseHeaders: error.response.headers,
+          responseBody: error.response.data,
+        });
+      }
+      return Promise.reject(error);
+    }
+  );
+}
 
 class WB {
   // Format axios error and throw clean error
@@ -21,6 +103,31 @@ class WB {
 
     console.error(errorMsg);
     throw new Error(errorMsg);
+  }
+
+  static async withRetry(fn, context, maxRetries = 5) {
+    let retries = 0;
+    while (true) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (error.response?.status === 429) {
+          retries++;
+          if (retries > maxRetries) {
+            throw new Error(`${context}: rate-limited after ${maxRetries} retries. Try again later.`);
+          }
+          const headers = error.response.headers || {};
+          const rlRetry = headers['x-ratelimit-retry'];
+          const retryAfter = parseInt(rlRetry || '0', 10);
+          const waitMs = retryAfter > 0 ? retryAfter * 1000 : 70000 * retries;
+          const waitSource = retryAfter > 0 ? '(from Retry-After header)' : '(exponential backoff)';
+          console.log(`Rate limited (429), retry ${retries}/${maxRetries}. Waiting ${waitMs / 1000}s ${waitSource}...`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 
   constructor() {
@@ -63,6 +170,14 @@ class WB {
         'Authorization': wbConfig.apiToken
       }
     });
+
+    attachLogInterceptors(this.client, 'common');
+    attachLogInterceptors(this.contentClient, 'content');
+    attachLogInterceptors(this.suppliersClient, 'suppliers');
+    attachLogInterceptors(this.statisticsClient, 'statistics');
+    attachLogInterceptors(this.suppliesClient, 'supplies');
+
+    console.log(`WB debug log: ${LOG_FILE}`);
   }
 
   async ping() {
@@ -145,8 +260,9 @@ class WB {
 
   async getAllCards() {
     const allProducts = [];
+    const limit = 50;
     let cursor = {
-      limit: 100
+      limit
     };
     let hasMore = true;
 
@@ -163,7 +279,10 @@ class WB {
 
         console.log(`Fetching products batch with cursor:`, JSON.stringify(cursor));
 
-        const response = await this.contentClient.post('/content/v2/get/cards/list', requestBody);
+        const response = await WB.withRetry(
+          () => this.contentClient.post('/content/v2/get/cards/list', requestBody),
+          'getAllCards'
+        );
         const result = response.data || {};
         const cards = result.cards || [];
 
@@ -178,7 +297,7 @@ class WB {
             // Update cursor with last item's data for next iteration
             const lastCard = cards[cards.length - 1];
             cursor = {
-              limit: 100,
+              limit,
               updatedAt: lastCard.updatedAt,
               nmID: lastCard.nmID
             };
@@ -295,12 +414,12 @@ class WB {
       console.log(`Fetching orders from statistics API starting at: ${dateFromRFC}`);
 
       try {
-        const response = await this.statisticsClient.get('/api/v1/supplier/orders', {
-          params: {
-            dateFrom: dateFromRFC,
-            flag: 0
-          }
-        });
+        const response = await WB.withRetry(
+          () => this.statisticsClient.get('/api/v1/supplier/orders', {
+            params: { dateFrom: dateFromRFC, flag: 0 }
+          }),
+          'getAllOrders'
+        );
 
         const orders = response.data || [];
 
@@ -357,10 +476,8 @@ class WB {
         }
 
         // Rate limiting: 1 request per minute
-        if (orders.length > 0) {
-          console.log('Waiting 60 seconds due to rate limit...');
-          await new Promise(resolve => setTimeout(resolve, 60000));
-        }
+        console.log('Waiting 60 seconds due to rate limit...');
+        await new Promise(resolve => setTimeout(resolve, 60000));
 
       } catch (error) {
         WB.handleError(error, 'Error fetching orders from statistics API');
@@ -453,9 +570,10 @@ class WB {
       console.log(`Fetching stocks from dateFrom: ${dateFrom}`);
 
       try {
-        const response = await this.statisticsClient.get('/api/v1/supplier/stocks', {
-          params: { dateFrom }
-        });
+        const response = await WB.withRetry(
+          () => this.statisticsClient.get('/api/v1/supplier/stocks', { params: { dateFrom } }),
+          'getStocks'
+        );
 
         const stocks = response.data || [];
 
@@ -523,13 +641,16 @@ class WB {
 
       // Get supplies with status 2, 3, 4, 5, 6 (in transit and recently delivered)
       // Status: 2=Planned, 3=Unloading allowed, 4=Accepting, 5=Accepted, 6=Unloaded
-      const response = await this.suppliesClient.post('/api/v1/supplies', {
-        // statusIDs: [2, 3, 4, 5, 6],
-        statusIDs: [3],
-        from: formatDate(fromDate),
-        till: formatDate(toDate),
-        type: 'createDate'  // Filter by supply creation date
-      });
+      const response = await WB.withRetry(
+        () => this.suppliesClient.post('/api/v1/supplies', {
+          // statusIDs: [2, 3, 4, 5, 6],
+          statusIDs: [3],
+          from: formatDate(fromDate),
+          till: formatDate(toDate),
+          type: 'createDate'  // Filter by supply creation date
+        }),
+        'getInTransitSupplies'
+      );
 
       const supplies = Array.isArray(response.data) ? response.data : [];
       const suppliesToProcess = limit ? supplies.slice(0, limit) : supplies;
@@ -545,14 +666,20 @@ class WB {
           console.log(`Processing supply ${i + 1}/${suppliesToProcess.length} (ID: ${supply.supplyID})...`);
 
           // Get supply details to get warehouse name
-          const detailsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}`);
+          const detailsResponse = await WB.withRetry(
+            () => this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}`),
+            'getInTransitSupplies/details'
+          );
           const supplyDetails = detailsResponse.data;
           const warehouseName = supplyDetails.warehouseName;
 
           // Get goods in this supply
-          const goodsResponse = await this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}/goods`, {
-            params: { isPreorderID: false }
-          });
+          const goodsResponse = await WB.withRetry(
+            () => this.suppliesClient.get(`/api/v1/supplies/${supply.supplyID}/goods`, {
+              params: { isPreorderID: false }
+            }),
+            'getInTransitSupplies/goods'
+          );
 
           const goods = Array.isArray(goodsResponse.data) ? goodsResponse.data : [];
           console.log(`  └─ ${warehouseName}: ${goods.length} products`);
