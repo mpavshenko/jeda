@@ -34,7 +34,9 @@ cron.schedule(ozonConfig.cronSchedule, async () => {
     // 2. Срок доставки с 14 дней до 10 дней
     // Apr 1st:
     // вернуть горизонт планирования с 14 на 28 дней
-    await fulfillmentReport(28, 28, 10);
+    // Aug 11th:
+    // изменить горизонт планирования с 14 на 7 дней.
+    await fulfillmentReport(28, 7, 10);
     console.log(`Ozon fulfillment report generation completed successfully`);
   } catch (error) {
     console.error(`Ozon fulfillment report generation failed:`, error.message || error);
