@@ -36,7 +36,9 @@ cron.schedule(ozonConfig.cronSchedule, async () => {
     // вернуть горизонт планирования с 14 на 28 дней
     // Jun 16th:
     // изменить горизонт планирования с 28 на 14 дней
-    await fulfillmentReport(28, 14, 10);
+    // Aug 11th:
+    // изменить горизонт планирования с 14 на 7 дней.
+    await fulfillmentReport(28, 7, 10);
     console.log(`Ozon fulfillment report generation completed successfully`);
   } catch (error) {
     console.error(`Ozon fulfillment report generation failed:`, error.message || error);
